@@ -46,7 +46,7 @@ export function getRoleStorageKey(role) {
   return `${DEFAULT_STORAGE_KEY}-${roleSlug}-${getOrCreateTabId()}`;
 }
 
-export function createSupabaseClient({ storageKey } = {}) {
+export function createSupabaseClient({ storageKey, detectSessionInUrl = false } = {}) {
   if (!hasSupabaseConfig) return null;
   const authStorageKey = storageKey || getTabAuthStorageKey();
 
@@ -54,13 +54,23 @@ export function createSupabaseClient({ storageKey } = {}) {
     auth: {
       storageKey: authStorageKey,
       persistSession: true,
-      detectSessionInUrl: false,
+      detectSessionInUrl,
     },
   });
 }
 
 export function getSupabase() {
   return createSupabaseClient();
+}
+
+// Every other page opts out of Supabase's automatic "read tokens out of the
+// URL" behavior (see the tab-isolation comment above) since it would step
+// on the per-tab storage key scheme. The email-confirmation landing page is
+// the one place that genuinely needs it — Supabase's confirmation link
+// redirects here with the session in the URL, and there's nothing else
+// that would consume it.
+export function getSupabaseForEmailConfirm() {
+  return createSupabaseClient({ storageKey: 'sb-campuslink-confirm-token', detectSessionInUrl: true });
 }
 
 export const supabase = getSupabase();

@@ -79,6 +79,7 @@ export default function SignUpPage() {
 				email,
 				password,
 				options: {
+					emailRedirectTo: `${window.location.origin}/confirm-email`,
 					data: {
 						full_name: fullName,
 						email,
