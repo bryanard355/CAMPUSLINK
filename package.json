@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:server": "node server.js",
     "build": "vite build",
     "preview": "vite preview"
   },
@@ -17,8 +16,6 @@
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.0",
     "@vitejs/plugin-react": "^6.0.5",
-    "cors": "^2.8.6",
-    "express": "^5.2.1",
     "lucide-react": "^1.28.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
