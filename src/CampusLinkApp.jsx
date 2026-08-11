@@ -78,12 +78,13 @@ const globalCss = `
   @media (max-width: 767px) {
     /* name-block becomes the one flexible item in the group — bell and
        avatar keep their fixed size, name/email shrink (and ellipsis) into
-       whatever space is actually left instead of a guessed width, and
-       overflow:hidden on the group clips rather than spilling over the
-       logo if there truly isn't room. */
+       whatever space is actually left instead of a guessed width. No
+       overflow:hidden here — the notification dropdown is an absolutely
+       positioned child of this same group and needs to render outside its
+       box; the flex sizing above is what actually prevents overflow now. */
     .cl-name-block { flex: 1 1 auto !important; min-width: 0 !important; max-width: none !important; }
     .cl-name-hide-mobile { display: none !important; }
-    .cl-nav-right { flex-shrink: 1 !important; min-width: 0 !important; overflow: hidden !important; }
+    .cl-nav-right { flex-shrink: 1 !important; min-width: 0 !important; }
   }
   /* Page bodies and cards use fairly generous desktop padding (24-32px) —
      tighten that on phones so more real content fits above the fold. */
