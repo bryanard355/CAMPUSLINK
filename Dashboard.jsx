@@ -250,6 +250,11 @@ export default function Dashboard() {
   const [marketItems, setMarketItems] = useState([]);
   const [reputation, setReputation] = useState({ avgRating: 0, exchangeCount: 0 });
   const [siteStats, setSiteStats] = useState({ students: 0, materials: 0, hours: 0 });
+  // This logged-in user's own sessions from the real bookings table — a
+  // mentor sees who has booked with THEM (tutor_id), a mentee sees what
+  // THEY booked (mentee_id). Keeps the personalized dashboard unique per
+  // account instead of everyone seeing the same platform-wide numbers.
+  const [mySessions, setMySessions] = useState([]);
 
   const [modalKind, setModalKind] = useState(null); // 'material' | 'market' | 'tutor'
   const [modalOpen, setModalOpen] = useState(false);
@@ -399,11 +404,33 @@ export default function Dashboard() {
     });
   }
 
+  // Pulls this specific account's rows out of the real bookings table —
+  // a mentor's count/list is scoped to tutor_id = their id, a mentee's to
+  // mentee_id = their id, so no two accounts ever see the same numbers.
+  async function loadMySessions() {
+    if (!client || !loggedInUser?.id) {
+      setMySessions([]);
+      return;
+    }
+    const column = isMentor ? 'tutor_id' : 'mentee_id';
+    const { data, error } = await client
+      .from('bookings')
+      .select('*')
+      .eq(column, String(loggedInUser.id))
+      .order('created_at', { ascending: false });
+    if (error) {
+      console.warn('Could not load your sessions:', error.message);
+      return;
+    }
+    setMySessions(data || []);
+  }
+
   useEffect(() => {
     loadProfiles();
     loadMaterials();
     loadMarketItems();
     loadAggregateStats();
+    loadMySessions();
   }, []);
 
   const tutorCourseOptions = useMemo(
@@ -907,20 +934,47 @@ export default function Dashboard() {
                   </>
                 )}
               </div>
-              <div className="card">
-                <h3 style={{ fontSize: '16px' }}>Platform reputation</h3>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8 }}>
-                  <span className="mono" style={{ fontSize: '28px', color: 'var(--green-deep)' }}>{reputation.avgRating.toFixed(1)}</span>
-                  <span className="pc-sub">from {reputation.exchangeCount} rating{reputation.exchangeCount === 1 ? '' : 's'}</span>
+              {loggedInUser ? (
+                <div className="card">
+                  <h3 style={{ fontSize: '16px' }}>Your sessions</h3>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8 }}>
+                    <span className="mono" style={{ fontSize: '28px', color: 'var(--green-deep)' }}>{mySessions.length}</span>
+                    <span className="pc-sub">session{mySessions.length === 1 ? '' : 's'} booked {isMentor ? 'with you' : 'by you'}</span>
+                  </div>
+                  {mySessions.length === 0 ? (
+                    <p className="pc-sub" style={{ marginTop: 10 }}>
+                      {isMentor
+                        ? 'No mentees have booked a session with you yet.'
+                        : 'You haven’t booked a session yet — open the app to find a tutor.'}
+                    </p>
+                  ) : (
+                    mySessions.slice(0, 3).map((s) => (
+                      <div className="mini-row" key={s.id}>
+                        <div>
+                          <div style={{ fontWeight: 600 }}>{isMentor ? s.mentee_name : s.tutor_name}</div>
+                          <div className="pc-sub">{s.day} · {s.time}</div>
+                        </div>
+                        <span className="tag">{s.status}</span>
+                      </div>
+                    ))
+                  )}
                 </div>
-                <div className="progress"><div style={{ width: `${Math.min(100, (reputation.avgRating / 5) * 100)}%` }}></div></div>
-                <div className="pc-sub" style={{ marginTop: 6 }}>Average material rating across all CampusLink contributors</div>
-                <div className="rep-tags">
-                  <span className="tag">{dbTutors.length} verified mentor{dbTutors.length === 1 ? '' : 's'}</span>
-                  <span className="tag">{dbMentees.length} mentee{dbMentees.length === 1 ? '' : 's'}</span>
-                  <span className="tag gold">{marketItems.length} marketplace listing{marketItems.length === 1 ? '' : 's'}</span>
+              ) : (
+                <div className="card">
+                  <h3 style={{ fontSize: '16px' }}>Platform reputation</h3>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginTop: 8 }}>
+                    <span className="mono" style={{ fontSize: '28px', color: 'var(--green-deep)' }}>{reputation.avgRating.toFixed(1)}</span>
+                    <span className="pc-sub">from {reputation.exchangeCount} rating{reputation.exchangeCount === 1 ? '' : 's'}</span>
+                  </div>
+                  <div className="progress"><div style={{ width: `${Math.min(100, (reputation.avgRating / 5) * 100)}%` }}></div></div>
+                  <div className="pc-sub" style={{ marginTop: 6 }}>Average material rating across all CampusLink contributors</div>
+                  <div className="rep-tags">
+                    <span className="tag">{dbTutors.length} verified mentor{dbTutors.length === 1 ? '' : 's'}</span>
+                    <span className="tag">{dbMentees.length} mentee{dbMentees.length === 1 ? '' : 's'}</span>
+                    <span className="tag gold">{marketItems.length} marketplace listing{marketItems.length === 1 ? '' : 's'}</span>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
 
