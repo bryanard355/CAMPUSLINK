@@ -548,7 +548,9 @@ function NavBar({ view, navigateView, user, sessionsOrigin, unreadCount = 0, unr
 --------------------------------------------------------------- */
 function HomePage({ upcoming, mentors, onOpenTutor, navigateView, user }) {
   const topPick = mentors && mentors.length > 0 ? mentors[0] : null;
-  const displayName = user?.name || 'Alex';
+  // No fallback name needed — CampusLinkApp now redirects to /login before
+  // ever rendering this page without a real logged-in user.
+  const displayName = user?.name || user?.email || 'there';
   return (
     <div className="cl-page" style={{ maxWidth: 1152, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 32 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
@@ -1508,6 +1510,11 @@ export default function CampusLinkApp() {
   const [bookingsTableMissing, setBookingsTableMissing] = useState(false);
   const [chatMessagesTableMissing, setChatMessagesTableMissing] = useState(false);
   const [user, setUser] = useState(null);
+  // While true, we haven't yet determined whether there's a real logged-in
+  // user (sessionStorage read is instant, but confirming/restoring a
+  // Supabase session is async) — used to avoid ever rendering the app with
+  // a placeholder "logged in as" state before redirecting to /login.
+  const [checkingSession, setCheckingSession] = useState(true);
   const navigateView = (nextView) => {
     setView(nextView);
     if (typeof window !== 'undefined') {
@@ -2220,21 +2227,32 @@ export default function CampusLinkApp() {
   }
 
   useEffect(() => {
+    let cancelled = false;
     const raw = sessionStorage.getItem('campuslink-user');
     if (raw) {
       try {
         setUser(JSON.parse(raw));
+        setCheckingSession(false);
+        return;
       } catch (error) {
         setUser(null);
+        // fall through — try to recover a real session below instead of
+        // just giving up on a corrupted cache entry
       }
     }
 
+    // No usable cached user. Rather than ever rendering the app as if
+    // someone were logged in (the old behavior fell back to a placeholder
+    // "Alex" account), try to restore a real Supabase session — and if
+    // that comes up empty too, send the visitor to /login instead.
     if (!hasSupabaseConfig) {
+      navigate('/login');
       return;
     }
 
     const client = getSupabase();
     if (!client) {
+      navigate('/login');
       return;
     }
 
@@ -2242,6 +2260,7 @@ export default function CampusLinkApp() {
       const { data, error } = await client.auth.getSession();
       const session = data?.session;
       if (error || !session?.user) {
+        if (!cancelled) navigate('/login');
         return;
       }
 
@@ -2250,14 +2269,21 @@ export default function CampusLinkApp() {
       const userMetadata = session.user.user_metadata || {};
       const profileUser = await loadProfileData(userId, userEmail, userMetadata);
       if (!profileUser) {
+        if (!cancelled) navigate('/login');
         return;
       }
 
       sessionStorage.setItem('campuslink-user', JSON.stringify(profileUser));
-      setUser(profileUser);
+      if (!cancelled) {
+        setUser(profileUser);
+        setCheckingSession(false);
+      }
     }
 
     syncUserFromProfile();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -2678,6 +2704,30 @@ export default function CampusLinkApp() {
     setSessionsOrigin(true);
     navigateView(user?.role === 'Mentor' ? 'mentorRequestDetail' : 'tutorProfile');
   };
+
+  // Never render the app (or any placeholder "logged in as ..." content)
+  // until we actually know who's logged in. While that's being resolved,
+  // or once we've determined there's no session and are redirecting to
+  // /login, show a minimal loading state instead.
+  if (checkingSession || !user) {
+    return (
+      <div
+        style={{
+          width: '100%',
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: C.bg,
+          fontFamily: FONT_BODY,
+          color: C.muted,
+          fontSize: 14,
+        }}
+      >
+        Loading your account…
+      </div>
+    );
+  }
 
   return (
     <div className="cl-root" style={{ width: '100%', minHeight: '100%', backgroundColor: C.bg, fontFamily: FONT_BODY }}>
