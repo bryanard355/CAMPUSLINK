@@ -169,6 +169,26 @@ const styles = `
     .stat { border-right:none; border-bottom:1px solid var(--surface-alt-2); padding-bottom:16px; margin-bottom:16px; }
     .stat:last-child { border-bottom:none; }
   }
+  @media (max-width:640px) {
+    .wrap { padding:0 16px; }
+    .app-section { padding:36px 0 56px; }
+    .app-head h2 { font-size:20px; }
+    .tabbar { margin-bottom:20px; }
+    .tab { margin-right:16px; font-size:13.5px; }
+    .filter-row { flex-direction:column; align-items:stretch; }
+    .filter-row input, .filter-row select { width:100%; min-width:0 !important; }
+    .add-row { justify-content:stretch; }
+    .add-row .btn { width:100%; justify-content:center; }
+    .person-card { flex-direction:column; align-items:stretch; gap:12px; padding:14px; }
+    .person-card > :last-child { width:100%; }
+    .person-card .btn { width:100%; justify-content:center; }
+    .pc-actions { justify-content:space-between; }
+    .pc-actions .btn { width:auto; flex:1 1 auto; }
+    .pc-name { font-size:14.5px; word-break:break-word; }
+    .pc-sub { word-break:break-word; }
+    .doc-icon { width:34px; height:34px; }
+    .modal { padding:20px; }
+  }
   @media (prefers-reduced-motion: reduce) {
     * { animation:none !important; transition:none !important; }
   }
@@ -1007,7 +1027,7 @@ export default function Dashboard() {
                           <div className="pc-sub mono">{material.course} · shared by {material.by} · {material.downloads} downloads</div>
                         </div>
                       </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <div className="pc-actions" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
                         <span className="stars" onClick={() => rateMaterial(material)} title="Rate this material 5 stars">{starString(avgRating)}</span>
                         <button
                           className="btn btn-ghost btn-sm"
