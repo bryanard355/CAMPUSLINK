@@ -146,10 +146,27 @@ function mapBookingRow(row) {
   };
 }
 
-// Sessions repeat weekly on a day name ("Mon") rather than a fixed calendar
-// date, so "due" is judged against the next time that weekday comes around.
-const WEEKDAY_INDEX = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+// Bookings now carry a real calendar date (picked from a <input type="date">)
+// rather than a recurring weekday name — this turns the raw "YYYY-MM-DD"
+// value into the friendly "Tue, Jan 14" label used everywhere a booking is
+// displayed. Parsed as a local date (not via `new Date(isoString)`, which
+// treats a bare date as UTC midnight and can display a day early/late
+// depending on the viewer's timezone).
+function formatBookingDate(isoDateString) {
+  if (!isoDateString) return '';
+  const [y, m, d] = String(isoDateString).split('-').map(Number);
+  if (!y || !m || !d) return isoDateString;
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
 
+function todayBookingLabel() {
+  return new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+// Free-text time only loosely matches this shape ("4:30 PM") — anything
+// else (24-hour time, "around 4", etc.) just means no live/soon badge,
+// which is a safe, non-breaking degradation rather than a crash.
 function parseTimeLabel(timeLabel) {
   const match = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(String(timeLabel || '').trim());
   if (!match) return null;
@@ -162,15 +179,13 @@ function parseTimeLabel(timeLabel) {
 }
 
 // Returns 'live' | 'soon' | 'today' | null depending on how close the
-// session's weekly day/time is to right now.
+// session's date/time is to right now. Only ever fires on the actual
+// booked date — no more "every Monday forever" false positives.
 function getSessionTiming(day, time) {
-  const dayIndex = WEEKDAY_INDEX[day];
   const parsedTime = parseTimeLabel(time);
-  if (dayIndex === undefined || !parsedTime) return null;
+  if (!day || day !== todayBookingLabel() || !parsedTime) return null;
 
   const now = new Date();
-  if (now.getDay() !== dayIndex) return null;
-
   const sessionMinutes = parsedTime.hours * 60 + parsedTime.minutes;
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const diff = sessionMinutes - nowMinutes;
@@ -738,7 +753,7 @@ function TutorCard({ t, onOpen, role }) {
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11.5, color: C.muted }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <Clock size={12} /> {Object.keys(t.availability).join(', ')}
+          <Clock size={12} /> Open to book any day
         </span>
         <span>{t.sessions} sessions</span>
       </div>
@@ -895,11 +910,21 @@ function TicketCard({ booking, tutorTitle }) {
   );
 }
 
+function todayIsoDate() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
 function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpenChat }) {
-  const [selected, setSelected] = useState(null);
+  // { date: 'YYYY-MM-DD', time: free text } — any day is bookable, and the
+  // mentee types their own preferred time rather than picking from a fixed
+  // list, since real per-mentor availability isn't tracked yet.
+  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedTime, setSelectedTime] = useState('');
+  const hasFullSlot = Boolean(selectedDate && selectedTime.trim());
+  const slotDisplay = hasFullSlot ? `${formatBookingDate(selectedDate)} at ${selectedTime.trim()}` : '';
   const [confirmed, setConfirmed] = useState(null);
   const [requestSent, setRequestSent] = useState(false);
-  const days = Object.keys(tutor.availability);
 
   return (
     <div className="cl-page" style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -925,7 +950,7 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
               <div style={{ display: 'flex', gap: 8, marginTop: 12, width: '100%' }}>
                 <button
                   onClick={() => {
-                    const slotLabel = selected ? `${selected.day} ${selected.time}` : 'Flexible timing';
+                    const slotLabel = hasFullSlot ? slotDisplay : 'Flexible timing';
                     const sharedId = Date.now();
                     const sessionCode = makeCode();
                     const request = {
@@ -955,15 +980,15 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
                     };
                     setRequestSent(true);
                     onRequestSent(request);
-                    if (selected) {
+                    if (hasFullSlot) {
                       const booking = {
                         id: sharedId,
                         initials: tutor.initials,
                         tutorName: tutor.name,
                         tutorId: tutor.id,
                         course: tutor.courses[0],
-                        day: selected.day,
-                        time: selected.time,
+                        day: formatBookingDate(selectedDate),
+                        time: selectedTime.trim(),
                         code: sessionCode,
                         status: 'pending',
                       };
@@ -997,10 +1022,6 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
                   <Pill key={c}>{c}</Pill>
                 ))}
               </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, marginTop: 14, paddingTop: 14, borderTop: `1px solid ${C.line}` }}>
-                <span style={{ color: C.muted }}>Rate</span>
-                <span style={{ fontWeight: 700, color: C.ink }}>GHS {tutor.price} / session</span>
-              </div>
             </Card>
 
             <Card style={{ padding: 16 }}>
@@ -1010,52 +1031,78 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
           </div>
 
           <Card style={{ padding: 20, height: 'fit-content' }}>
-            <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 15, color: C.ink, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 14 }}>
-              <Clock size={15} /> Choose a session slot
+            <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 15, color: C.ink, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+              <Calendar size={15} /> Pick a date &amp; time
             </div>
-            <div className="cl-5col" style={{ display: 'grid', gridTemplateColumns: `repeat(${Math.min(days.length, 4)}, 1fr)`, gap: 10 }}>
-              {days.map((day) => (
-                <div key={day} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, textAlign: 'center', padding: '7px 0', borderRadius: 7, backgroundColor: C.greenDark, color: '#fff' }}>
-                    {day}
-                  </div>
-                  {tutor.availability[day].map((time) => {
-                    const isSel = selected && selected.day === day && selected.time === time;
-                    return (
-                      <button
-                        key={time}
-                        onClick={() => setSelected({ day, time })}
-                        className="cl-slot-btn"
-                        style={{
-                          fontSize: 12,
-                          padding: '10px 4px',
-                          borderRadius: 10,
-                          fontWeight: 600,
-                          border: `1.5px solid ${isSel ? C.gold : C.line}`,
-                          backgroundColor: isSel ? C.goldSoft : 'transparent',
-                          color: C.ink,
-                        }}
-                      >
-                        {time}
-                      </button>
-                    );
-                  })}
+            <p style={{ fontSize: 12.5, color: C.muted, margin: '0 0 16px' }}>
+              Book any day that works for you — {tutor.name} will confirm once they accept your request.
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>Date</span>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    border: `1px solid ${C.line}`,
+                    borderRadius: 10,
+                    padding: '0 12px',
+                  }}
+                >
+                  <Calendar size={15} color={C.muted} />
+                  <input
+                    type="date"
+                    className="cl-input"
+                    min={todayIsoDate()}
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    style={{ flex: 1, border: 'none', outline: 'none', padding: '10px 0', fontSize: 13.5, background: 'transparent', color: C.ink }}
+                  />
                 </div>
-              ))}
+              </label>
+
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: C.ink }}>Time</span>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    border: `1px solid ${C.line}`,
+                    borderRadius: 10,
+                    padding: '0 12px',
+                  }}
+                >
+                  <Clock size={15} color={C.muted} />
+                  <input
+                    type="text"
+                    className="cl-input"
+                    placeholder="e.g. 4:30 PM"
+                    value={selectedTime}
+                    onChange={(e) => setSelectedTime(e.target.value)}
+                    style={{ flex: 1, border: 'none', outline: 'none', padding: '10px 0', fontSize: 13.5, background: 'transparent', color: C.ink }}
+                  />
+                </div>
+              </label>
             </div>
+
             <button
-              disabled={!selected}
+              disabled={!hasFullSlot}
               onClick={() => {
                 const sharedId = Date.now();
                 const sessionCode = makeCode();
+                const bookingDay = formatBookingDate(selectedDate);
+                const bookingTime = selectedTime.trim();
                 const booking = {
                   id: sharedId,
                   initials: tutor.initials,
                   tutorName: tutor.name,
                   tutorId: tutor.id,
                   course: tutor.courses[0],
-                  day: selected.day,
-                  time: selected.time,
+                  day: bookingDay,
+                  time: bookingTime,
                   code: sessionCode,
                   status: 'pending',
                 };
@@ -1077,22 +1124,22 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
                     .toUpperCase(),
                   major: user?.course || 'Your course',
                   course: tutor.courses[0],
-                  focus: `Booked a session on ${selected.day} at ${selected.time} for ${tutor.courses[0]}.`,
-                  urgency: `${selected.day} at ${selected.time}`,
+                  focus: `Booked a session on ${bookingDay} at ${bookingTime} for ${tutor.courses[0]}.`,
+                  urgency: `${bookingDay} at ${bookingTime}`,
                   match: 92,
-                  availability: [`${selected.day} ${selected.time}`],
+                  availability: [`${bookingDay} ${bookingTime}`],
                   title: 'Mentee request',
                   verified: false,
                   sessions: 0,
                   price: 0,
-                  bio: `${user?.name || 'A student'} booked a session with ${tutor.name} on ${selected.day} at ${selected.time} for ${tutor.courses[0]}.`,
+                  bio: `${user?.name || 'A student'} booked a session with ${tutor.name} on ${bookingDay} at ${bookingTime} for ${tutor.courses[0]}.`,
                   testimonial: { name: user?.name || 'Student', text: 'Looking forward to my session.' },
                   mentorName: tutor.name,
                   status: 'pending',
                   code: sessionCode,
                 });
               }}
-              className={selected ? 'cl-primary-btn' : ''}
+              className={hasFullSlot ? 'cl-primary-btn' : ''}
               style={{
                 marginTop: 20,
                 width: '100%',
@@ -1101,12 +1148,12 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
                 fontWeight: 700,
                 fontSize: 13.5,
                 border: 'none',
-                backgroundColor: selected ? C.greenDark : C.line,
-                color: selected ? '#fff' : C.faint,
-                cursor: selected ? 'pointer' : 'not-allowed',
+                backgroundColor: hasFullSlot ? C.greenDark : C.line,
+                color: hasFullSlot ? '#fff' : C.faint,
+                cursor: hasFullSlot ? 'pointer' : 'not-allowed',
               }}
             >
-              {selected ? `Confirm ${selected.day} at ${selected.time}` : 'Select a slot to continue'}
+              {hasFullSlot ? `Confirm ${slotDisplay}` : 'Pick a date and time to continue'}
             </button>
           </Card>
         </div>
@@ -1144,8 +1191,10 @@ function SessionStatusPill({ status }) {
 
 function SessionCard({ booking: b, isMentor, mentors, onReschedule, onCancel, onOpen }) {
   const [rescheduling, setRescheduling] = useState(false);
-  const [pendingDay, setPendingDay] = useState(b.day || null);
-  const [pendingTime, setPendingTime] = useState(b.time || null);
+  // Any day is reschedulable, and the new time is free text — same as the
+  // initial booking flow, rather than picking from a fixed slot list.
+  const [pendingDate, setPendingDate] = useState('');
+  const [pendingTime, setPendingTime] = useState('');
 
   const displayName = isMentor ? (b.menteeName || 'Mentee') : b.tutorName;
   const initials = b.initials || displayName
@@ -1158,11 +1207,8 @@ function SessionCard({ booking: b, isMentor, mentors, onReschedule, onCancel, on
   const isCancelled = status === 'cancelled';
   const when = b.day && b.time ? `${b.day}, ${b.time}` : 'Flexible timing';
 
-  const tutorAvailability = !isMentor
-    ? (mentors || []).find((m) => String(m.id) === String(b.tutorId))?.availability
-    : null;
-
-  const hasChosenNewSlot = pendingDay && pendingTime && (pendingDay !== b.day || pendingTime !== b.time);
+  const hasChosenNewSlot = Boolean(pendingDate && pendingTime.trim());
+  const pendingDayLabel = pendingDate ? formatBookingDate(pendingDate) : '';
 
   return (
     <div style={{ borderRadius: 20, border: `1px solid ${C.line}`, boxShadow: '0 16px 40px -26px rgba(15,81,50,0.22)', overflow: 'hidden' }}>
@@ -1221,70 +1267,51 @@ function SessionCard({ booking: b, isMentor, mentors, onReschedule, onCancel, on
 
         {rescheduling && (
           <div style={{ padding: 12, borderRadius: 14, backgroundColor: '#F7F7F3', display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {tutorAvailability && Object.keys(tutorAvailability).length > 0 ? (
-              <>
-                <div className="cl-scroll" style={{ display: 'flex', gap: 10, overflowX: 'auto' }}>
-                  {Object.keys(tutorAvailability).map((day) => (
-                    <div key={day} style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
-                      <div style={{ fontSize: 11, fontWeight: 700, textAlign: 'center', padding: '5px 10px', borderRadius: 7, backgroundColor: C.greenDark, color: '#fff' }}>
-                        {day}
-                      </div>
-                      {tutorAvailability[day].map((time) => {
-                        const isSel = pendingDay === day && pendingTime === time;
-                        return (
-                          <button
-                            key={time}
-                            type="button"
-                            onClick={() => {
-                              setPendingDay(day);
-                              setPendingTime(time);
-                            }}
-                            className="cl-slot-btn"
-                            style={{
-                              fontSize: 11.5,
-                              padding: '8px 10px',
-                              borderRadius: 9,
-                              fontWeight: 600,
-                              border: `1.5px solid ${isSel ? C.gold : C.line}`,
-                              backgroundColor: isSel ? C.goldSoft : 'transparent',
-                              color: C.ink,
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {time}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  disabled={!hasChosenNewSlot}
-                  onClick={() => {
-                    onReschedule(b, pendingDay, pendingTime);
-                    setRescheduling(false);
-                  }}
-                  className={hasChosenNewSlot ? 'cl-primary-btn' : ''}
-                  style={{
-                    padding: '10px 0',
-                    borderRadius: 999,
-                    fontWeight: 700,
-                    fontSize: 12.5,
-                    border: 'none',
-                    backgroundColor: hasChosenNewSlot ? C.greenDark : C.line,
-                    color: hasChosenNewSlot ? '#fff' : C.faint,
-                    cursor: hasChosenNewSlot ? 'pointer' : 'not-allowed',
-                  }}
-                >
-                  {hasChosenNewSlot ? `Save ${pendingDay} at ${pendingTime}` : 'Pick a new slot'}
-                </button>
-              </>
-            ) : (
-              <div style={{ fontSize: 12.5, color: C.muted }}>
-                No availability found for this mentor yet.
-              </div>
-            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.ink }}>New date</span>
+                <input
+                  type="date"
+                  className="cl-input"
+                  min={todayIsoDate()}
+                  value={pendingDate}
+                  onChange={(e) => setPendingDate(e.target.value)}
+                  style={{ border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 12.5, color: C.ink, background: '#fff' }}
+                />
+              </label>
+              <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.ink }}>New time</span>
+                <input
+                  type="text"
+                  className="cl-input"
+                  placeholder="e.g. 4:30 PM"
+                  value={pendingTime}
+                  onChange={(e) => setPendingTime(e.target.value)}
+                  style={{ border: `1px solid ${C.line}`, borderRadius: 8, padding: '8px 10px', fontSize: 12.5, color: C.ink, background: '#fff' }}
+                />
+              </label>
+            </div>
+            <button
+              type="button"
+              disabled={!hasChosenNewSlot}
+              onClick={() => {
+                onReschedule(b, pendingDayLabel, pendingTime.trim());
+                setRescheduling(false);
+              }}
+              className={hasChosenNewSlot ? 'cl-primary-btn' : ''}
+              style={{
+                padding: '10px 0',
+                borderRadius: 999,
+                fontWeight: 700,
+                fontSize: 12.5,
+                border: 'none',
+                backgroundColor: hasChosenNewSlot ? C.greenDark : C.line,
+                color: hasChosenNewSlot ? '#fff' : C.faint,
+                cursor: hasChosenNewSlot ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {hasChosenNewSlot ? `Save ${pendingDayLabel} at ${pendingTime.trim()}` : 'Pick a new date and time'}
+            </button>
           </div>
         )}
       </div>
@@ -2350,7 +2377,6 @@ export default function CampusLinkApp() {
           bio: profile.course
             ? `Experienced mentor available for ${profile.course} support.`
             : `Experienced campus mentor ready to help with your coursework.`,
-          availability: { Mon: ['4:00 PM'], Wed: ['5:00 PM'] },
           testimonial: { name: 'Student', text: 'Great mentor matched through CampusLink.' },
         }))
       );
