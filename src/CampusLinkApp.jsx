@@ -69,6 +69,30 @@ const globalCss = `
   @media (max-width: 639px) { .cl-2col { grid-template-columns: 1fr !important; } }
   @media (max-width: 1023px) { .cl-3col { grid-template-columns: 1fr 1fr !important; } }
   @media (max-width: 767px) { .cl-3col { grid-template-columns: 1fr !important; } .cl-5col { grid-template-columns: 1fr !important; } .cl-split { grid-template-columns: 1fr !important; } }
+  /* On phones the top bar only has room for the logo, notification bell,
+     and avatar — the name/email column is dropped there and only shown
+     once the user is actually on their Profile page. When it IS shown
+     (on Profile), the group holding it must be allowed to shrink and the
+     name/email need a capped width, or the fixed-size logo + bell + avatar
+     push it past the viewport edge and cause horizontal scroll. */
+  @media (max-width: 767px) {
+    /* name-block becomes the one flexible item in the group — bell and
+       avatar keep their fixed size, name/email shrink (and ellipsis) into
+       whatever space is actually left instead of a guessed width, and
+       overflow:hidden on the group clips rather than spilling over the
+       logo if there truly isn't room. */
+    .cl-name-block { flex: 1 1 auto !important; min-width: 0 !important; max-width: none !important; }
+    .cl-name-hide-mobile { display: none !important; }
+    .cl-nav-right { flex-shrink: 1 !important; min-width: 0 !important; overflow: hidden !important; }
+  }
+  /* Page bodies and cards use fairly generous desktop padding (24-32px) —
+     tighten that on phones so more real content fits above the fold. */
+  @media (max-width: 639px) {
+    /* Extra bottom clearance so the fixed floating chat button (56px,
+       bottom:24) never sits on top of the last card's content. */
+    .cl-page { padding-left: 16px !important; padding-right: 16px !important; padding-top: 20px !important; padding-bottom: 100px !important; }
+    .cl-card { padding: 16px !important; }
+  }
 `;
 
 const DEPARTMENTS = ['All', 'Computer Science', 'Mathematics', 'Physics', 'Economics'];
@@ -361,8 +385,8 @@ function NavBar({ view, navigateView, user, sessionsOrigin, unreadCount = 0, unr
           })}
         </nav>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
-          <div style={{ position: 'relative' }}>
+        <div className="cl-nav-right" style={{ display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, minWidth: 0 }}>
+          <div style={{ position: 'relative', flexShrink: 0 }}>
             <button
               type="button"
               className="cl-icon-btn"
@@ -465,11 +489,14 @@ function NavBar({ view, navigateView, user, sessionsOrigin, unreadCount = 0, unr
               </div>
             )}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, minWidth: 0 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <div
+            className={`cl-name-block${view === 'profile' ? '' : ' cl-name-hide-mobile'}`}
+            style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1, minWidth: 0 }}
+          >
+            <span style={{ display: 'block', width: '100%', fontSize: 13, fontWeight: 700, color: C.ink, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right' }}>
               {user?.name || 'CampusLink user'}
             </span>
-            <span style={{ fontSize: 11, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <span style={{ display: 'block', width: '100%', fontSize: 11, color: C.faint, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textAlign: 'right' }}>
               {user?.email || 'not signed in'}
             </span>
           </div>
@@ -523,7 +550,7 @@ function HomePage({ upcoming, mentors, onOpenTutor, navigateView, user }) {
   const topPick = mentors && mentors.length > 0 ? mentors[0] : null;
   const displayName = user?.name || 'Alex';
   return (
-    <div style={{ maxWidth: 1152, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 32 }}>
+    <div className="cl-page" style={{ maxWidth: 1152, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 32 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
         <div>
           <div style={{ fontSize: 13.5, color: C.muted }}>Welcome back,</div>
@@ -736,7 +763,7 @@ function TutorCard({ t, onOpen, role }) {
 function TutorsPage({ role, dept, setDept, query, setQuery, filtered, onOpen }) {
   const isMentor = role === 'Mentor';
   return (
-    <div style={{ maxWidth: 1152, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="cl-page" style={{ maxWidth: 1152, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div>
         <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: 26, fontWeight: 700, color: C.ink, margin: 0 }}>
           {isMentor ? 'Student requests' : 'Find a tutor'}
@@ -872,7 +899,7 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
   const days = Object.keys(tutor.availability);
 
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="cl-page" style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <button
         onClick={onBack}
         style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13.5, fontWeight: 600, color: C.green, border: 'none', background: 'none', width: 'fit-content', padding: 0 }}
@@ -1265,7 +1292,7 @@ function SessionCard({ booking: b, isMentor, mentors, onReschedule, onCancel, on
 function SessionsPage({ bookings, role, mentors, onReschedule, onCancel, onOpen }) {
   const isMentor = role === 'Mentor';
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div className="cl-page" style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 16 }}>
       <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: 26, fontWeight: 700, color: C.ink, margin: 0 }}>
         {isMentor ? 'My mentoring sessions' : 'My sessions'}
       </h1>
@@ -1301,7 +1328,7 @@ function ProfilePage({ onLogout, user, editing, editProfile, onEdit, onCancel, o
   const initials = user?.name ? user.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase() : 'CL';
 
   return (
-    <div style={{ maxWidth: 768, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="cl-page" style={{ maxWidth: 768, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
         <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: 26, fontWeight: 700, color: C.ink, margin: 0 }}>My profile</h1>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
@@ -3008,7 +3035,7 @@ function MentorHomePage({ upcoming, requests, onOpenRequest, onAccept, navigateV
     : null;
 
   return (
-    <div style={{ maxWidth: 1152, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 32 }}>
+    <div className="cl-page" style={{ maxWidth: 1152, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 32 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>
         <div>
           <div style={{ fontSize: 13.5, color: C.muted }}>Welcome back,</div>
@@ -3158,7 +3185,7 @@ function MentorRequestCard({ request, onOpen, onAccept }) {
 
 function MentorRequestsPage({ dept, setDept, query, setQuery, filtered, onOpen, onAccept }) {
   return (
-    <div style={{ maxWidth: 1152, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="cl-page" style={{ maxWidth: 1152, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div>
         <h1 style={{ fontFamily: FONT_DISPLAY, fontSize: 26, fontWeight: 700, color: C.ink, margin: 0 }}>Student requests</h1>
         <div style={{ fontSize: 13.5, color: C.muted, marginTop: 2 }}>
@@ -3231,7 +3258,7 @@ function MentorRequestDetailPage({ request, onBack, onAccept }) {
   const status = request.status || 'pending';
   const isPending = status === 'pending';
   return (
-    <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 20 }}>
+    <div className="cl-page" style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 20 }}>
       <button
         onClick={onBack}
         style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13.5, fontWeight: 600, color: C.green, border: 'none', background: 'none', width: 'fit-content', padding: 0 }}
