@@ -267,6 +267,27 @@ export default function LoginPage() {
     console.log('Logged in user role:', actualRole);
   }
 
+  async function handleGoogleLogin() {
+    if (!hasSupabaseConfig) {
+      setStatus({ type: 'error', message: 'Google sign-in requires Supabase to be configured.' });
+      return;
+    }
+    const client = getSupabase();
+    if (!client) {
+      setStatus({ type: 'error', message: 'Unable to initialize Supabase.' });
+      return;
+    }
+    const { error } = await client.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
+    });
+    if (error) {
+      setStatus({ type: 'error', message: error.message });
+    }
+    // On success the browser navigates to Google immediately — AuthCallbackPage
+    // takes it from there once Google redirects back.
+  }
+
   function handleDemoLogin() {
     setEmail(DEMO_ACCOUNT.email);
     setPassword(DEMO_ACCOUNT.password);
@@ -452,7 +473,14 @@ export default function LoginPage() {
 
               <div className="social-grid">
                 {socialOptions.map((option) => (
-                  <button key={option} type="button" className="social-button">
+                  <button
+                    key={option}
+                    type="button"
+                    className="social-button"
+                    onClick={option === 'Google' ? handleGoogleLogin : undefined}
+                    disabled={option !== 'Google'}
+                    title={option === 'Google' ? undefined : 'Coming soon'}
+                  >
                     {option}
                   </button>
                 ))}

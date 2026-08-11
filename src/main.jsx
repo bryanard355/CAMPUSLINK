@@ -10,6 +10,7 @@ import MarketplacePage from './MarketplacePage.jsx';
 import LoginPage from './LoginPage.jsx';
 import SignUpPage from './SignUpPage.jsx';
 import EmailConfirmedPage from './EmailConfirmedPage.jsx';
+import AuthCallbackPage from './AuthCallbackPage.jsx';
 import CampusLinkApp from './CampusLinkApp.jsx';
 
 const loginStyles = `
@@ -490,6 +491,10 @@ const loginStyles = `
     font-weight: 600;
     cursor: pointer;
   }
+  .social-button:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
 
   .auth-footer {
     margin: 18px 0 0;
@@ -573,6 +578,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/confirm-email" element={<EmailConfirmedPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>

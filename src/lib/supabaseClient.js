@@ -65,12 +65,14 @@ export function getSupabase() {
 
 // Every other page opts out of Supabase's automatic "read tokens out of the
 // URL" behavior (see the tab-isolation comment above) since it would step
-// on the per-tab storage key scheme. The email-confirmation landing page is
-// the one place that genuinely needs it — Supabase's confirmation link
-// redirects here with the session in the URL, and there's nothing else
-// that would consume it.
-export function getSupabaseForEmailConfirm() {
-  return createSupabaseClient({ storageKey: 'sb-campuslink-confirm-token', detectSessionInUrl: true });
+// on the per-tab storage key scheme. The email-confirmation page and the
+// Google OAuth callback page are the two places that genuinely need it —
+// Supabase redirects back to them with the session in the URL, and there's
+// nothing else that would consume it. Once a real session is found, those
+// pages re-persist it under the correct tab-scoped key (via setTabAuthStorageKey
+// + a normal getSupabase() client) so the rest of the app can see it.
+export function getSupabaseForAuthRedirect() {
+  return createSupabaseClient({ storageKey: 'sb-campuslink-redirect-token', detectSessionInUrl: true });
 }
 
 export const supabase = getSupabase();

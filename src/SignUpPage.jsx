@@ -166,6 +166,28 @@ export default function SignUpPage() {
 		}
 	}
 
+	async function handleGoogleSignUp() {
+		if (!hasSupabaseConfig) {
+			setStatus({ type: 'error', message: 'Google sign-in requires Supabase to be configured.' });
+			return;
+		}
+		const client = getSupabase();
+		if (!client) {
+			setStatus({ type: 'error', message: 'Unable to initialize Supabase.' });
+			return;
+		}
+		const { error } = await client.auth.signInWithOAuth({
+			provider: 'google',
+			options: { redirectTo: `${window.location.origin}/auth/callback` },
+		});
+		if (error) {
+			setStatus({ type: 'error', message: error.message });
+		}
+		// On success the browser navigates to Google immediately — AuthCallbackPage
+		// takes it from there (and asks Mentor/Mentee once, since Google skips
+		// this form entirely) once Google redirects back.
+	}
+
 	useEffect(() => {
 		if (!hasSupabaseConfig) {
 			return;
@@ -344,9 +366,9 @@ export default function SignUpPage() {
 								<div className="divider"><span>or continue with</span></div>
 
 								<div className="social-grid">
-									<button type="button" className="social-button">Google</button>
-									<button type="button" className="social-button">Microsoft</button>
-									<button type="button" className="social-button">University Email</button>
+									<button type="button" className="social-button" onClick={handleGoogleSignUp}>Google</button>
+									<button type="button" className="social-button" disabled title="Coming soon">Microsoft</button>
+									<button type="button" className="social-button" disabled title="Coming soon">University Email</button>
 								</div>
 							</form>
 

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, XCircle, Loader2, GraduationCap, ArrowRight } from 'lucide-react';
-import { hasSupabaseConfig, getSupabaseForEmailConfirm } from './lib/supabaseClient';
+import { hasSupabaseConfig, getSupabaseForAuthRedirect } from './lib/supabaseClient';
 
 const styles = `
   @keyframes ec-spin { to { transform: rotate(360deg); } }
@@ -48,7 +48,7 @@ export default function EmailConfirmedPage() {
       return;
     }
 
-    const client = getSupabaseForEmailConfirm();
+    const client = getSupabaseForAuthRedirect();
     if (!client) {
       setState('success');
       return;
