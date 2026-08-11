@@ -138,6 +138,14 @@ const styles = `
   }
   @media (max-width:560px) {
     .lp-feature-grid { grid-template-columns:1fr; }
+    .lp-wrap { padding:0 18px; }
+    .lp-hero { padding:32px 0 40px; }
+    .lp-hero h1 { font-size:26px; }
+    .lp-lead { font-size:14.5px; }
+    .lp-cta-row { flex-direction:column; align-items:stretch; }
+    .lp-cta-row .lp-btn { text-align:center; }
+    .lp-nav { height:60px; }
+    .lp-logo { font-size:17px; }
   }
 `;
 

@@ -394,10 +394,14 @@ const loginStyles = `
 
   .input-shell input {
     flex: 1;
+    min-width: 0;
     border: none;
     outline: none;
     background: transparent;
-    font-size: 14px;
+    /* 16px, not 14px: iOS Safari auto-zooms the whole page when a focused
+       input's font-size is under 16px, which is the "why does my phone
+       zoom in when I tap the field" bug on the login/signup forms. */
+    font-size: 16px;
     color: var(--login-text);
   }
 
@@ -501,6 +505,54 @@ const loginStyles = `
     .metrics-row,
     .social-grid {
       grid-template-columns: 1fr;
+    }
+
+    /* Put the actual login/signup form first on mobile — visitors land on
+       a form, not a scroll of marketing copy, before reaching it. This is
+       a visual reorder only (order:), the underlying DOM/tab order is
+       unchanged. */
+    .form-panel {
+      order: 1;
+    }
+    .brand-panel {
+      order: 2;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .login-shell {
+      padding: 16px;
+    }
+
+    .login-grid {
+      gap: 16px;
+    }
+
+    .brand-panel,
+    .auth-card {
+      padding: 20px;
+      border-radius: 18px;
+    }
+
+    .brand-panel h1 {
+      font-size: 28px;
+    }
+
+    .lead-copy {
+      font-size: 14.5px;
+    }
+
+    .auth-card h2 {
+      font-size: 22px;
+    }
+
+    /* The decorative wave/cube art is meant to bleed off-screen at desktop
+       size — on a narrow phone it just eats space behind the form, so
+       shrink and tuck it further into the corner instead of hiding it
+       outright (keeps some of the visual identity). */
+    .login-bg-wave {
+      width: 70%;
+      opacity: 0.28;
     }
   }
 `;
