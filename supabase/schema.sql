@@ -286,3 +286,19 @@ notify pgrst, 'reload schema';
 alter table public.mentee_requests add column if not exists tutor_id text;
 
 notify pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------------
+-- Migration: bookings.date + bookings.checked_in_at — powers the mentee-side
+-- "Check in" button on the session ticket. `date` is the raw YYYY-MM-DD the
+-- booking was made for (bookings.day only ever stored a display label like
+-- "Tue, Jan 14", which loses the year and can't be reliably compared against
+-- "now" once that label stops matching today's date). `checked_in_at` is set
+-- the moment the mentee checks in; `status` gets set to 'missed' (alongside
+-- the existing 'pending' / 'accepted' / 'cancelled' values, still just plain
+-- text — no enum/check constraint on this column) once an hour has passed
+-- with no check-in. Safe to re-run.
+-- ---------------------------------------------------------------------------
+alter table public.bookings add column if not exists date text;
+alter table public.bookings add column if not exists checked_in_at timestamptz;
+
+notify pgrst, 'reload schema';

@@ -16,6 +16,8 @@ import {
   BadgeCheck,
   MessageCircle,
   X,
+  CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 
 /* ---------------------------------------------------------------
@@ -141,9 +143,11 @@ function mapBookingRow(row) {
     menteeName: row.mentee_name,
     course: row.course,
     day: row.day,
+    dateIso: row.date ?? null,
     time: row.time,
     code: row.code,
     status: row.status || 'pending',
+    checkedInAt: row.checked_in_at ?? null,
   };
 }
 
@@ -195,6 +199,42 @@ function getSessionTiming(day, time) {
   if (diff > 0 && diff <= 60) return 'soon';
   if (diff > 60) return 'today';
   return null;
+}
+
+// Reconstructs the exact moment a booking starts, using the raw ISO date
+// stored alongside its display label (booking.day is just a formatted
+// string like "Tue, Jan 14" with no year, so it can't be compared against
+// "now" once that label stops matching today — a booking made a week ago
+// still says "Tue, Jan 14" forever). Older bookings made before dateIso
+// existed only have the label, so they fall back to trusting it as "today"
+// — the one case where that's still reliable.
+function getBookingStartDate(booking) {
+  const parsedTime = parseTimeLabel(booking?.time);
+  if (!parsedTime) return null;
+  if (booking.dateIso) {
+    const [y, m, d] = String(booking.dateIso).split('-').map(Number);
+    if (!y || !m || !d) return null;
+    return new Date(y, m - 1, d, parsedTime.hours, parsedTime.minutes);
+  }
+  if (booking.day === todayBookingLabel()) {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate(), parsedTime.hours, parsedTime.minutes);
+  }
+  return null;
+}
+
+// 'checked' | 'checkable' | 'not-yet' | 'overdue' | 'unscheduled'. The Check
+// in button opens right at the session's start time and stays open for one
+// hour; past that with no check-in, it's overdue — the caller is
+// responsible for then flipping the booking's status to 'missed'.
+function getCheckInState(booking) {
+  if (booking?.checkedInAt) return 'checked';
+  const start = getBookingStartDate(booking);
+  if (!start) return 'unscheduled';
+  const diffMinutes = (Date.now() - start.getTime()) / 60000;
+  if (diffMinutes < 0) return 'not-yet';
+  if (diffMinutes <= 60) return 'checkable';
+  return 'overdue';
 }
 
 function SessionTimingBadge({ day, time }) {
@@ -1112,9 +1152,11 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
                   tutorId: tutor.id,
                   course: tutor.courses[0],
                   day: bookingDay,
+                  dateIso: selectedDate,
                   time: bookingTime,
                   code: sessionCode,
                   status: 'pending',
+                  checkedInAt: null,
                 };
                 setConfirmed(booking);
                 onBooked(booking);
@@ -1180,7 +1222,7 @@ function SessionStatusPill({ status }) {
   if (status === 'accepted') {
     return <Pill tone="green">✓ Approved</Pill>;
   }
-  if (status === 'declined' || status === 'cancelled') {
+  if (status === 'declined' || status === 'cancelled' || status === 'missed') {
     return (
       <span
         style={{
@@ -1193,14 +1235,14 @@ function SessionStatusPill({ status }) {
           whiteSpace: 'nowrap',
         }}
       >
-        {status === 'cancelled' ? 'Cancelled' : 'Declined'}
+        {status === 'cancelled' ? 'Cancelled' : status === 'missed' ? 'Missed' : 'Declined'}
       </span>
     );
   }
   return <Pill tone="gold">Pending approval</Pill>;
 }
 
-function SessionCard({ booking: b, isMentor, mentors, onReschedule, onCancel, onOpen }) {
+function SessionCard({ booking: b, isMentor, mentors, onReschedule, onCancel, onCheckIn, onOpen }) {
   const [rescheduling, setRescheduling] = useState(false);
   // Any day is reschedulable, and the new time is free text — same as the
   // initial booking flow, rather than picking from a fixed slot list.
@@ -1217,6 +1259,9 @@ function SessionCard({ booking: b, isMentor, mentors, onReschedule, onCancel, on
   const status = b.status || 'pending';
   const isCancelled = status === 'cancelled';
   const when = b.day && b.time ? `${b.day}, ${b.time}` : 'Flexible timing';
+  // Only the mentee checks in, and only once the mentor has actually
+  // accepted — a still-pending request has nothing confirmed to show up to.
+  const checkInState = !isMentor && status === 'accepted' ? getCheckInState(b) : 'unscheduled';
 
   const hasChosenNewSlot = Boolean(pendingDate && pendingTime.trim());
   const pendingDayLabel = pendingDate ? formatBookingDate(pendingDate) : '';
@@ -1254,6 +1299,65 @@ function SessionCard({ booking: b, isMentor, mentors, onReschedule, onCancel, on
             <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{b.course} · {when}</div>
           </div>
         </div>
+
+        {checkInState === 'checkable' && (
+          <button
+            type="button"
+            onClick={() => onCheckIn(b)}
+            className="cl-primary-btn"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              padding: '9px 0',
+              borderRadius: 999,
+              fontSize: 12.5,
+              fontWeight: 700,
+              border: 'none',
+              backgroundColor: C.greenDark,
+              color: '#fff',
+            }}
+          >
+            <CheckCircle2 size={14} /> Check in
+          </button>
+        )}
+        {checkInState === 'checked' && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              padding: '9px 0',
+              borderRadius: 999,
+              fontSize: 12.5,
+              fontWeight: 700,
+              backgroundColor: C.greenSoft,
+              color: C.greenDark,
+            }}
+          >
+            <CheckCircle2 size={14} /> Checked in
+          </div>
+        )}
+        {checkInState === 'overdue' && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+              padding: '9px 0',
+              borderRadius: 999,
+              fontSize: 12.5,
+              fontWeight: 700,
+              backgroundColor: '#FBE9E7',
+              color: '#B3261E',
+            }}
+          >
+            <AlertCircle size={14} /> Overdue
+          </div>
+        )}
 
         {!isMentor && !isCancelled && (
           <div style={{ display: 'flex', gap: 8 }}>
@@ -1330,7 +1434,7 @@ function SessionCard({ booking: b, isMentor, mentors, onReschedule, onCancel, on
   );
 }
 
-function SessionsPage({ bookings, role, mentors, onReschedule, onCancel, onOpen }) {
+function SessionsPage({ bookings, role, mentors, onReschedule, onCancel, onCheckIn, onOpen }) {
   const isMentor = role === 'Mentor';
   return (
     <div className="cl-page" style={{ maxWidth: 900, margin: '0 auto', padding: '32px 24px 64px', display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -1353,6 +1457,7 @@ function SessionsPage({ bookings, role, mentors, onReschedule, onCancel, onOpen 
               mentors={mentors}
               onReschedule={onReschedule}
               onCancel={onCancel}
+              onCheckIn={onCheckIn}
               onOpen={onOpen}
             />
           ))}
@@ -2613,9 +2718,11 @@ export default function CampusLinkApp() {
       tutor_initials: booking.initials,
       course: booking.course,
       day: booking.day,
+      date: booking.dateIso || null,
       time: booking.time,
       code: booking.code,
       status: booking.status || 'pending',
+      checked_in_at: booking.checkedInAt || null,
     };
 
     client
@@ -2747,6 +2854,75 @@ export default function CampusLinkApp() {
         });
     }
   };
+
+  // Mentee checks in to a confirmed session ticket once it's started (and
+  // within the 1-hour check-in window — see getCheckInState). Recorded as a
+  // timestamp rather than a plain flag so "when" is kept too.
+  const handleCheckIn = (booking) => {
+    const checkedInAt = new Date().toISOString();
+    setBookings((prev) => {
+      const next = prev.map((b) => (String(b.id) === String(booking.id) ? { ...b, checkedInAt } : b));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('campuslink-bookings', JSON.stringify(next));
+        window.dispatchEvent(new CustomEvent('campuslink-bookings-updated', { detail: next }));
+      }
+      return next;
+    });
+
+    if (!hasSupabaseConfig || bookingsTableMissing) return;
+    const client = getSupabase();
+    if (!client) return;
+
+    client
+      .from('bookings')
+      .update({ checked_in_at: checkedInAt })
+      .eq('id', String(booking.id))
+      .then(({ error }) => {
+        if (error) console.warn('Could not persist check-in to Supabase:', error.message);
+      });
+  };
+
+  // A confirmed booking that goes unchecked for more than an hour past its
+  // start time flips to "missed" on its own — nothing else naturally
+  // re-renders the Sessions page once you've stopped looking at it, so this
+  // re-checks on a timer rather than only reacting to other state changes.
+  useEffect(() => {
+    function markOverdueBookingsMissed() {
+      setBookings((prev) => {
+        const next = prev.map((b) =>
+          (b.status || 'pending') === 'accepted' && getCheckInState(b) === 'overdue'
+            ? { ...b, status: 'missed' }
+            : b
+        );
+        const newlyMissed = next.filter((b, i) => b.status === 'missed' && prev[i]?.status !== 'missed');
+        if (newlyMissed.length === 0) return prev;
+
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('campuslink-bookings', JSON.stringify(next));
+          window.dispatchEvent(new CustomEvent('campuslink-bookings-updated', { detail: next }));
+        }
+        if (hasSupabaseConfig && !bookingsTableMissing) {
+          const client = getSupabase();
+          if (client) {
+            newlyMissed.forEach((b) => {
+              client
+                .from('bookings')
+                .update({ status: 'missed' })
+                .eq('id', String(b.id))
+                .then(({ error }) => {
+                  if (error) console.warn('Could not persist missed booking status to Supabase:', error.message);
+                });
+            });
+          }
+        }
+        return next;
+      });
+    }
+
+    markOverdueBookingsMissed();
+    const interval = setInterval(markOverdueBookingsMissed, 60000);
+    return () => clearInterval(interval);
+  }, [bookingsTableMissing]);
 
   const openRequest = (request) => {
     setActiveRequest(request);
@@ -3120,6 +3296,7 @@ export default function CampusLinkApp() {
           mentors={mentors}
           onReschedule={handleRescheduleBooking}
           onCancel={handleCancelBooking}
+          onCheckIn={handleCheckIn}
           onOpen={openSession}
         />
       )}
