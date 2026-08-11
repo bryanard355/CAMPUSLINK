@@ -306,9 +306,7 @@ export default function LandingPage() {
 
       <footer className="lp-footer">
         <div className="lp-wrap">
-          CampusLink · CSM 366 Mini Project · Supervisor: Dr. Benjamin Tei-Partey
-          <br />
-          {CONTACT.email} · {CONTACT.phone} · {CONTACT.location}
+          CampusLink · {CONTACT.email} · {CONTACT.phone} · {CONTACT.location}
         </div>
       </footer>
     </div>

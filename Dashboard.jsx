@@ -3,6 +3,12 @@ import { GraduationCap } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getSupabase, hasSupabaseConfig } from './src/lib/supabaseClient.js';
 
+const CONTACT = {
+  email: 'bryanowusuansah56@gmail.com',
+  phone: '0536547409',
+  location: 'KNUST, Kumasi, Ghana',
+};
+
 function normalizeRole(roleValue) {
   const role = String(roleValue || '').trim().toLowerCase();
   if (role === 'tutor' || role === 'mentor') return 'Mentor';
@@ -1076,8 +1082,8 @@ export default function Dashboard() {
 
       <footer>
         <div className="wrap foot-row">
-          <div>CampusLink · CSM 366 Mini Project · Supervisor: Dr. Benjamin Tei-Partey</div>
-          <div>Sackey · Sanogo · Owusu-Ansah Kwame</div>
+          <div>CampusLink</div>
+          <div>{CONTACT.email} · {CONTACT.phone} · {CONTACT.location}</div>
         </div>
       </footer>
 
