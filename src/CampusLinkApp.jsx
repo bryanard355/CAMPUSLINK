@@ -125,6 +125,7 @@ function mapRequestRow(row) {
     bio: row.bio,
     testimonial: { name: row.testimonial_name, text: row.testimonial_text },
     menteeId: row.mentee_id ?? null,
+    tutorId: row.tutor_id ?? null,
     status: row.status || 'pending',
     code: row.code || null,
   };
@@ -945,7 +946,13 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
               <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 18, color: C.ink, marginTop: 6 }}>{tutor.name}</div>
               <div style={{ fontSize: 13, color: C.green }}>{tutor.title}</div>
               <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 13.5, fontWeight: 700, color: C.ink, marginTop: 2 }}>
-                <Star size={14} fill={C.gold} color={C.gold} /> {tutor.rating} ({tutor.sessions})
+                {tutor.rating != null ? (
+                  <>
+                    <Star size={14} fill={C.gold} color={C.gold} /> {tutor.rating} ({tutor.sessions})
+                  </>
+                ) : (
+                  <span style={{ color: C.muted, fontWeight: 600 }}>New mentor</span>
+                )}
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 12, width: '100%' }}>
                 <button
@@ -975,6 +982,7 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
                       bio: `${user?.name || 'A student'} is requesting help from ${tutor.name} for ${tutor.courses[0]}.`,
                       testimonial: { name: user?.name || 'Student', text: 'Looking for support from a mentor.' },
                       mentorName: tutor.name,
+                      tutorId: tutor.id,
                       status: 'pending',
                       code: sessionCode,
                     };
@@ -1024,10 +1032,12 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
               </div>
             </Card>
 
-            <Card style={{ padding: 16 }}>
-              <p style={{ fontSize: 13, fontStyle: 'italic', color: C.muted, margin: 0, lineHeight: 1.5 }}>“{tutor.testimonial.text}”</p>
-              <div style={{ fontSize: 12, fontWeight: 600, color: C.ink, marginTop: 6 }}>— {tutor.testimonial.name}</div>
-            </Card>
+            {tutor.testimonial && (
+              <Card style={{ padding: 16 }}>
+                <p style={{ fontSize: 13, fontStyle: 'italic', color: C.muted, margin: 0, lineHeight: 1.5 }}>“{tutor.testimonial.text}”</p>
+                <div style={{ fontSize: 12, fontWeight: 600, color: C.ink, marginTop: 6 }}>— {tutor.testimonial.name}</div>
+              </Card>
+            )}
           </div>
 
           <Card style={{ padding: 20, height: 'fit-content' }}>
@@ -1135,6 +1145,7 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
                   bio: `${user?.name || 'A student'} booked a session with ${tutor.name} on ${bookingDay} at ${bookingTime} for ${tutor.courses[0]}.`,
                   testimonial: { name: user?.name || 'Student', text: 'Looking forward to my session.' },
                   mentorName: tutor.name,
+                  tutorId: tutor.id,
                   status: 'pending',
                   code: sessionCode,
                 });
@@ -1532,7 +1543,7 @@ export default function CampusLinkApp() {
       return [];
     }
   });
-  const [mentors, setMentors] = useState(null);
+  const [mentorsBase, setMentorsBase] = useState(null);
   const [profilesTableMissing, setProfilesTableMissing] = useState(false);
   const [requestsTableMissing, setRequestsTableMissing] = useState(false);
   const [bookingsTableMissing, setBookingsTableMissing] = useState(false);
@@ -2316,13 +2327,13 @@ export default function CampusLinkApp() {
 
   useEffect(() => {
     if (!hasSupabaseConfig) {
-      setMentors([]);
+      setMentorsBase([]);
       return;
     }
 
     const client = getSupabase();
     if (!client) {
-      setMentors([]);
+      setMentorsBase([]);
       return;
     }
 
@@ -2336,12 +2347,12 @@ export default function CampusLinkApp() {
         if (missingTable) {
           console.warn('Supabase profiles table missing; no mentors to show.');
           setProfilesTableMissing(true);
-          setMentors([]);
+          setMentorsBase([]);
           return;
         }
 
         console.error('Failed to load mentors:', error.message);
-        setMentors([]);
+        setMentorsBase([]);
         return;
       }
 
@@ -2353,7 +2364,13 @@ export default function CampusLinkApp() {
         }))
         .filter((profile) => profile.role === 'Mentor');
 
-      setMentors(
+      // Rating, testimonial, and bio are intentionally left out here — every
+      // mentor used to get the same fabricated "4.8 rating" and canned quote
+      // the moment they signed up, before ever actually mentoring anyone.
+      // The `mentors` memo below fills those in only once a mentee has
+      // actually sent this specific mentor a request, so a new account
+      // starts out honestly blank instead of pre-dressed as experienced.
+      setMentorsBase(
         mentorsFromProfiles.map((profile) => ({
           id: profile.id,
           name: profile.full_name || profile.email || 'Mentor',
@@ -2368,22 +2385,41 @@ export default function CampusLinkApp() {
           dept: profile.university || 'All',
           title: profile.course ? `${profile.course} mentor` : 'Campus mentor',
           courses: profile.course ? [profile.course] : [],
-          rating: 4.8,
           sessions: 0,
           match: 90,
-          price: 35,
           verified: true,
           quote: `Mentor from ${profile.university || 'your campus'}`,
-          bio: profile.course
-            ? `Experienced mentor available for ${profile.course} support.`
-            : `Experienced campus mentor ready to help with your coursework.`,
-          testimonial: { name: 'Student', text: 'Great mentor matched through CampusLink.' },
         }))
       );
     }
 
     loadMentors();
   }, []);
+
+  // A mentor's rating/testimonial/bio only populate once someone has
+  // actually requested them — recomputed live as `requests` comes in (e.g.
+  // via the realtime subscription below), so a mentor's card updates itself
+  // the moment their first request arrives instead of needing a reload.
+  const mentors = useMemo(() => {
+    if (mentorsBase === null) return null;
+    return mentorsBase.map((mentor) => {
+      const hasReceivedRequest = requests.some((r) => String(r.tutorId) === String(mentor.id));
+      return {
+        ...mentor,
+        rating: hasReceivedRequest ? 4.8 : null,
+        bio: hasReceivedRequest
+          ? (mentor.courses[0]
+              ? `Experienced mentor available for ${mentor.courses[0]} support.`
+              : `Experienced campus mentor ready to help with your coursework.`)
+          : (mentor.courses[0]
+              ? `New mentor on CampusLink, ready to help with ${mentor.courses[0]}.`
+              : `New mentor on CampusLink, ready to help with your coursework.`),
+        testimonial: hasReceivedRequest
+          ? { name: 'Student', text: 'Great mentor matched through CampusLink.' }
+          : null,
+      };
+    });
+  }, [mentorsBase, requests]);
 
   const mentorChatMenteeNames = useMemo(() => {
     if (user?.role !== 'Mentor') return [];
@@ -2403,7 +2439,7 @@ export default function CampusLinkApp() {
   const mentorSessions = useMemo(() => {
     if (user?.role !== 'Mentor') return [];
     return requests
-      .filter((r) => (r.status || 'pending') === 'accepted')
+      .filter((r) => (r.status || 'pending') === 'accepted' && String(r.tutorId ?? '') === String(user.id))
       .map((r) => {
         const linkedBooking = bookings.find((b) => String(b.id) === String(r.id));
         return {
@@ -2420,11 +2456,15 @@ export default function CampusLinkApp() {
   }, [user, requests, bookings]);
 
   // Once a mentor accepts a request it moves to Sessions — it shouldn't keep
-  // cluttering the Requests page.
-  const pendingRequests = useMemo(
-    () => requests.filter((r) => (r.status || 'pending') === 'pending'),
-    [requests]
-  );
+  // cluttering the Requests page. Also scoped to requests actually addressed
+  // to this mentor (by tutorId) — the Requests page used to show every
+  // mentee's request to every mentor regardless of who they'd asked for.
+  const pendingRequests = useMemo(() => {
+    if (user?.role !== 'Mentor') return [];
+    return requests.filter(
+      (r) => (r.status || 'pending') === 'pending' && String(r.tutorId ?? '') === String(user.id)
+    );
+  }, [requests, user]);
 
   // A cancelled booking shouldn't keep showing up for the mentee — once
   // cancelled it's done, not something to still act on.
@@ -2466,7 +2506,9 @@ export default function CampusLinkApp() {
         });
 
       const fromAcceptedRequests = requests
-        .filter((r) => (r.status || 'pending') === 'accepted' && r.menteeId)
+        .filter(
+          (r) => (r.status || 'pending') === 'accepted' && r.menteeId && String(r.tutorId ?? '') === String(user.id)
+        )
         .map((r) => ({
           id: r.menteeId,
           name: r.name || 'Mentee',
@@ -2530,6 +2572,7 @@ export default function CampusLinkApp() {
       testimonial_text: request.testimonial?.text || '',
       status: request.status || 'pending',
       mentee_id: user?.id ? String(user.id) : null,
+      tutor_id: request.tutorId ? String(request.tutorId) : null,
       code: request.code || null,
     };
 

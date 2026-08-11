@@ -274,3 +274,15 @@ create policy "Anyone can delete course material files"
   using (bucket_id = 'course-materials');
 
 notify pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------------
+-- Migration: mentee_requests.tutor_id — records which mentor a mentee's
+-- request/booking was originally addressed to (any mentor can still accept
+-- it from the shared "Student requests" pool). This is what lets the app
+-- tell a brand-new mentor apart from one who has actually been requested at
+-- least once, so a fresh mentor account doesn't show a fabricated rating and
+-- testimonial before anyone has ever reached out to them. Safe to re-run.
+-- ---------------------------------------------------------------------------
+alter table public.mentee_requests add column if not exists tutor_id text;
+
+notify pgrst, 'reload schema';
