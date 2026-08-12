@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { hasSupabaseConfig, getSupabase } from './lib/supabaseClient';
 import {
   GraduationCap,
@@ -1623,6 +1623,7 @@ function ProfilePage({ onLogout, user, editing, editProfile, onEdit, onCancel, o
 --------------------------------------------------------------- */
 export default function CampusLinkApp() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [view, setView] = useState('home');
   const [activeTutor, setActiveTutor] = useState(null);
   const [activeRequest, setActiveRequest] = useState(null);
@@ -2950,6 +2951,20 @@ export default function CampusLinkApp() {
     setSessionsOrigin(true);
     navigateView(user?.role === 'Mentor' ? 'mentorRequestDetail' : 'tutorProfile');
   };
+
+  // Deep-link support: the landing dashboard's "Contact" button on another
+  // mentor's card navigates here with { openChatWith: { id, name } } in
+  // router state, so tapping it lands straight in that conversation instead
+  // of just the generic Home page. Consumed once the user is loaded, then
+  // cleared from history state so a refresh or back-navigation doesn't
+  // reopen the same thread.
+  useEffect(() => {
+    const target = location.state?.openChatWith;
+    if (!target || !user?.id) return;
+    openChatContact(target);
+    navigate(location.pathname, { replace: true, state: {} });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state, user?.id]);
 
   // Never render the app (or any placeholder "logged in as ..." content)
   // until we actually know who's logged in. While that's being resolved,

@@ -440,12 +440,15 @@ export default function Dashboard() {
 
   const filteredTutors = useMemo(() => {
     const query = tutorSearch.toLowerCase();
-    return dbTutors.filter((t) => {
-      const matchesFilter = !tutorFilter || t.course === tutorFilter;
-      const matchesQuery = [t.name, t.topic, t.course].some((field) => field.toLowerCase().includes(query));
-      return matchesFilter && matchesQuery;
-    });
-  }, [tutorFilter, tutorSearch, dbTutors]);
+    return dbTutors
+      // A mentor shouldn't see themselves listed as someone to contact.
+      .filter((t) => !loggedInUser || String(t.id) !== String(loggedInUser.id))
+      .filter((t) => {
+        const matchesFilter = !tutorFilter || t.course === tutorFilter;
+        const matchesQuery = [t.name, t.topic, t.course].some((field) => field.toLowerCase().includes(query));
+        return matchesFilter && matchesQuery;
+      });
+  }, [tutorFilter, tutorSearch, dbTutors, loggedInUser]);
 
   const filteredMaterials = useMemo(() => {
     const query = materialSearch.toLowerCase();
@@ -1045,14 +1048,30 @@ export default function Dashboard() {
                     <button
                       className="btn btn-primary btn-sm"
                       style={{ width: '100%', justifyContent: 'center', marginTop: 12 }}
-                      onClick={() => navigate(loggedInUser ? '/home' : '/signup')}
+                      onClick={() => {
+                        if (!loggedInUser) {
+                          navigate('/signup');
+                        } else if (isMentor) {
+                          // One mentor reaching out to another — send them
+                          // straight into the app's message box with that
+                          // mentor's thread already open, instead of a
+                          // meaningless "book" action between two mentors.
+                          navigate('/home', { state: { openChatWith: { id: tutor.id, name: tutor.name } } });
+                        } else {
+                          navigate('/home');
+                        }
+                      }}
                     >
-                      {loggedInUser ? 'Open in app to book' : 'Sign up to book'}
+                      {!loggedInUser ? 'Sign up to book' : isMentor ? 'Contact' : 'Open in app to book'}
                     </button>
                   </div>
                 ))
               ) : (
-                <p className="pc-sub">No tutors match that search.</p>
+                <p className="pc-sub">
+                  {isMentor && !tutorSearch && !tutorFilter
+                    ? 'No other mentors have joined yet — check back soon.'
+                    : 'No tutors match that search.'}
+                </p>
               )}
             </div>
           </div>
