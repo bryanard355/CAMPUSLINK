@@ -201,6 +201,23 @@ function getSessionTiming(day, time) {
   return null;
 }
 
+// The match badge used to just be a flat 90% on every mentor, for every
+// mentee, regardless of course. This scores it off the actual course
+// overlap between the two: an exact match reads as a strong match, one
+// course name containing the other (e.g. a mentee in "Computer Science" and
+// a mentor in "Computer Science - Software Track") still counts as related,
+// and anything else falls back to a low, honest score rather than a
+// fabricated one. Missing course info on either side can't be judged at
+// all, so it lands on a neutral default instead of a high or low guess.
+function computeCourseMatch(menteeCourse, mentorCourse) {
+  const a = String(menteeCourse || '').trim().toLowerCase();
+  const b = String(mentorCourse || '').trim().toLowerCase();
+  if (!a || !b) return 75;
+  if (a === b) return 98;
+  if (a.includes(b) || b.includes(a)) return 85;
+  return 60;
+}
+
 // Reconstructs the exact moment a booking starts, using the raw ISO date
 // stored alongside its display label (booking.day is just a formatted
 // string like "Tue, Jan 14" with no year, so it can't be compared against
@@ -2492,7 +2509,6 @@ export default function CampusLinkApp() {
           title: profile.course ? `${profile.course} mentor` : 'Campus mentor',
           courses: profile.course ? [profile.course] : [],
           sessions: 0,
-          match: 90,
           verified: true,
           quote: `Mentor from ${profile.university || 'your campus'}`,
         }))
@@ -2512,6 +2528,7 @@ export default function CampusLinkApp() {
       const hasReceivedRequest = requests.some((r) => String(r.tutorId) === String(mentor.id));
       return {
         ...mentor,
+        match: computeCourseMatch(user?.course, mentor.courses[0]),
         rating: hasReceivedRequest ? 4.8 : null,
         bio: hasReceivedRequest
           ? (mentor.courses[0]
@@ -2525,7 +2542,7 @@ export default function CampusLinkApp() {
           : null,
       };
     });
-  }, [mentorsBase, requests]);
+  }, [mentorsBase, requests, user]);
 
   const mentorChatMenteeNames = useMemo(() => {
     if (user?.role !== 'Mentor') return [];
