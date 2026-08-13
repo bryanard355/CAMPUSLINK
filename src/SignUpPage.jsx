@@ -72,7 +72,7 @@ export default function SignUpPage() {
 				return;
 			}
 			const { data: currentSession } = await client.auth.getSession();
-			if (currentSession?.data?.session) {
+			if (currentSession?.session) {
 				await client.auth.signOut();
 			}
 			const { data, error } = await client.auth.signUp({

@@ -56,7 +56,7 @@ export default function MarketplacePage() {
             </p>
           </div>
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/dashboard')}
             style={{ background: '#1F7A4D', color: 'white', border: 'none', padding: '10px 16px', borderRadius: 10, fontWeight: 600 }}
           >
             Back to Dashboard

@@ -155,9 +155,6 @@ const styles = `
   .modal p { color:var(--ink-soft); font-size:14px; margin:0 0 18px; }
   .modal label { display:block; font-size:12.5px; font-weight:600; color:var(--green-deep); margin:12px 0 6px; }
   .modal input, .modal textarea { width:100%; font-family:'Inter',sans-serif; padding:9px 12px; border-radius:8px; border:1px solid var(--line); background:var(--surface); font-size:13.5px; color:var(--ink); }
-  .slot-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:20px; }
-  .slot { border:1px solid var(--line); border-radius:8px; padding:9px 4px; text-align:center; font-size:12.5px; background:var(--surface-alt); color:var(--green-deep); font-weight:500; }
-  .slot.selected { background:var(--green-mid); color:#fff; border-color:var(--green-mid); }
   .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top:16px; }
 
   @media (max-width:880px) {
@@ -256,11 +253,8 @@ export default function Dashboard() {
   // account instead of everyone seeing the same platform-wide numbers.
   const [mySessions, setMySessions] = useState([]);
 
-  const [modalKind, setModalKind] = useState(null); // 'material' | 'market' | 'tutor'
+  const [modalKind, setModalKind] = useState(null); // 'material' | 'market'
   const [modalOpen, setModalOpen] = useState(false);
-  const [modalTitle, setModalTitle] = useState('');
-  const [modalDescription, setModalDescription] = useState('');
-  const [selectedSlot, setSelectedSlot] = useState(null);
   const [activeSwap, setActiveSwap] = useState(null);
   const [formFields, setFormFields] = useState({});
   const [materialFile, setMaterialFile] = useState(null);
@@ -625,14 +619,6 @@ export default function Dashboard() {
     loadAggregateStats();
   }
 
-  function openTutorModal(tutor) {
-    setModalKind('tutor');
-    setModalTitle(`Book ${tutor.name}`);
-    setModalDescription(`${tutor.course} · ${tutor.topic}`);
-    setSelectedSlot(null);
-    setModalOpen(true);
-  }
-
   async function proposeSwap(mentee) {
     const senderId = loggedInUser?.id || 'guest';
     const senderName = loggedInUser?.name || loggedInUser?.email || 'A CampusLink visitor';
@@ -801,11 +787,6 @@ export default function Dashboard() {
 
     setModalOpen(false);
     showToast('Posted — thanks for contributing!');
-  }
-
-  function confirmBooking() {
-    setModalOpen(false);
-    showToast(`Session booked with ${modalTitle.replace('Book ', '')}`);
   }
 
   return (
@@ -1189,28 +1170,6 @@ export default function Dashboard() {
         }}
       >
         <div className="modal">
-          {modalKind === 'tutor' && (
-            <>
-              <h3>{modalTitle}</h3>
-              <p>{modalDescription}</p>
-              <div className="slot-grid">
-                {['Mon 3pm', 'Tue 5pm', 'Wed 4pm', 'Thu 2pm', 'Fri 6pm', 'Sat 11am'].map((slot) => (
-                  <div
-                    key={slot}
-                    className={`slot ${selectedSlot === slot ? 'selected' : ''}`}
-                    onClick={() => setSelectedSlot(slot)}
-                  >
-                    {slot}
-                  </div>
-                ))}
-              </div>
-              <div className="modal-actions">
-                <button className="btn btn-ghost btn-sm" onClick={() => setModalOpen(false)}>Cancel</button>
-                <button className="btn btn-primary btn-sm" onClick={confirmBooking}>Confirm booking</button>
-              </div>
-            </>
-          )}
-
           {modalKind === 'material' && (
             <>
               <h3>Upload material</h3>

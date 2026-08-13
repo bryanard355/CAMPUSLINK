@@ -231,7 +231,16 @@ export default function LoginPage() {
     }
 
     const actualRoleSource = profile?.role || user?.user_metadata?.role || '';
-    const actualRole = normalizeRole(actualRoleSource);
+    // When nothing anywhere has a stored role (e.g. a profile row that could
+    // never be created because the account has no valid full name — see
+    // ensureProfile above), fall back to 'Mentee' rather than trusting
+    // whatever role happens to be selected in the login dropdown. Without
+    // this, the account's effective role could silently become whatever was
+    // clicked each time, while a page reload re-derives it via
+    // CampusLinkApp's own loader — which defaults to 'Mentee' the same way —
+    // causing the same account's role to flip depending on how it was
+    // reached.
+    const actualRole = actualRoleSource ? normalizeRole(actualRoleSource) : 'Mentee';
     const requestedRole = normalizeRole(loginRole);
 
     if (actualRoleSource && actualRole !== requestedRole) {
@@ -258,7 +267,7 @@ export default function LoginPage() {
         id: user?.id,
         name: displayName,
         email: user?.email || email,
-        role: normalizeRole(profile?.role || user?.user_metadata?.role || loginRole),
+        role: actualRole,
         university: profile?.university || '',
         course: profile?.course || '',
       })

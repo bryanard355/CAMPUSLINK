@@ -106,11 +106,21 @@ export default function AuthCallbackPage() {
 			if (settled || !session?.user) return;
 			settled = true;
 
-			const { data: existingProfile } = await client
+			const { data: existingProfile, error: profileError } = await client
 				.from('profiles')
 				.select('full_name, email, role, university, course')
 				.eq('id', session.user.id)
 				.maybeSingle();
+
+			// A failed lookup must NOT fall through to "new account" — that path
+			// re-upserts the profile and would silently wipe a returning user's
+			// real university/course back to blank on a merely transient error.
+			if (profileError) {
+				console.error('Failed to load profile after Google sign-in:', profileError.message);
+				setErrorMessage('We could not load your account. Please try signing in again.');
+				setState('error');
+				return;
+			}
 
 			const existingRole = normalizeRole(existingProfile?.role);
 			if (existingRole) {
@@ -198,14 +208,18 @@ export default function AuthCallbackPage() {
 		const fullName =
 			pendingUser.user_metadata?.full_name || pendingUser.user_metadata?.name || pendingUser.email?.split('@')[0] || 'CampusLink user';
 
+		// university/course are deliberately omitted here rather than sent as
+		// '' — this path only reaches a genuinely new account in the normal
+		// case, but as a fallback for the profile-lookup-failed case, an
+		// upsert's ON CONFLICT only overwrites columns actually present in the
+		// payload, so leaving these out preserves any real values already on
+		// the row instead of blanking them.
 		const { error } = await client.from('profiles').upsert(
 			{
 				id: pendingUser.id,
 				full_name: fullName,
 				email: pendingUser.email,
 				role,
-				university: '',
-				course: '',
 			},
 			{ onConflict: 'id' }
 		);

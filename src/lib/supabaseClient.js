@@ -46,17 +46,35 @@ export function getRoleStorageKey(role) {
   return `${DEFAULT_STORAGE_KEY}-${roleSlug}-${getOrCreateTabId()}`;
 }
 
+// Callers throughout the app call getSupabase() fresh, on demand, in every
+// effect/handler that needs it rather than holding onto one instance —
+// convenient, but naively minting a new GoTrueClient on every call means
+// several can end up running concurrently against the very same storage key,
+// which is a known source of flaky session behavior. Caching per storage key
+// (rather than one client for the app's whole lifetime) fixes that while
+// still creating a genuinely new client whenever the key actually changes —
+// which does need to happen: setTabAuthStorageKey() switches it at login,
+// signup, and role selection, and a stale cached client would keep writing
+// to the pre-switch key instead.
+const clientCache = new Map();
+
 export function createSupabaseClient({ storageKey, detectSessionInUrl = false } = {}) {
   if (!hasSupabaseConfig) return null;
   const authStorageKey = storageKey || getTabAuthStorageKey();
+  const cacheKey = `${authStorageKey}::${detectSessionInUrl}`;
 
-  return createClient(supabaseUrl, supabaseAnonKey, {
+  const cached = clientCache.get(cacheKey);
+  if (cached) return cached;
+
+  const client = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       storageKey: authStorageKey,
       persistSession: true,
       detectSessionInUrl,
     },
   });
+  clientCache.set(cacheKey, client);
+  return client;
 }
 
 export function getSupabase() {
@@ -74,5 +92,3 @@ export function getSupabase() {
 export function getSupabaseForAuthRedirect() {
   return createSupabaseClient({ storageKey: 'sb-campuslink-redirect-token', detectSessionInUrl: true });
 }
-
-export const supabase = getSupabase();
