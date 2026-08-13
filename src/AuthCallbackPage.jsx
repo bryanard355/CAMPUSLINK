@@ -39,6 +39,7 @@ const styles = `
 	.ac-role-card:hover { border-color: var(--login-accent); background: var(--login-surface-soft); }
 	.ac-role-card:active { transform: translateY(1px); }
 	.ac-role-card:disabled { opacity: 0.6; cursor: default; }
+	.ac-role-card.selected { border-color: var(--login-accent); background: var(--login-surface-soft); box-shadow: 0 0 0 2px var(--login-accent) inset; }
 	.ac-role-icon {
 		width: 44px;
 		height: 44px;
@@ -74,6 +75,9 @@ export default function AuthCallbackPage() {
 	const [errorMessage, setErrorMessage] = useState('');
 	const [pendingUser, setPendingUser] = useState(null);
 	const [pendingSession, setPendingSession] = useState(null);
+	const [selectedRole, setSelectedRole] = useState(null);
+	const [university, setUniversity] = useState('');
+	const [course, setCourse] = useState('');
 
 	useEffect(() => {
 		const params = new URLSearchParams(window.location.search);
@@ -201,25 +205,29 @@ export default function AuthCallbackPage() {
 		navigate('/home', { replace: true });
 	}
 
-	async function chooseRole(role) {
-		if (!pendingUser || !pendingSession) return;
+	async function chooseRole() {
+		if (!pendingUser || !pendingSession || !selectedRole) return;
 		setState('finishing');
 		const client = getSupabaseForAuthRedirect();
 		const fullName =
 			pendingUser.user_metadata?.full_name || pendingUser.user_metadata?.name || pendingUser.email?.split('@')[0] || 'CampusLink user';
+		const cleanUniversity = university.trim();
+		const cleanCourse = course.trim();
 
-		// university/course are deliberately omitted here rather than sent as
-		// '' — this path only reaches a genuinely new account in the normal
-		// case, but as a fallback for the profile-lookup-failed case, an
+		// university/course are only included when the visitor actually typed
+		// something — this path only reaches a genuinely new account in the
+		// normal case, but as a fallback for the profile-lookup-failed case, an
 		// upsert's ON CONFLICT only overwrites columns actually present in the
-		// payload, so leaving these out preserves any real values already on
-		// the row instead of blanking them.
+		// payload, so leaving a blank one out preserves any real value already
+		// on the row instead of wiping it.
 		const { error } = await client.from('profiles').upsert(
 			{
 				id: pendingUser.id,
 				full_name: fullName,
 				email: pendingUser.email,
-				role,
+				role: selectedRole,
+				...(cleanUniversity ? { university: cleanUniversity } : {}),
+				...(cleanCourse ? { course: cleanCourse } : {}),
 			},
 			{ onConflict: 'id' }
 		);
@@ -228,7 +236,7 @@ export default function AuthCallbackPage() {
 			console.warn('Failed to save profile after Google sign-in:', error.message);
 		}
 
-		await finishLogin(client, pendingSession, { full_name: fullName, role, university: '', course: '' });
+		await finishLogin(client, pendingSession, { full_name: fullName, role: selectedRole, university: cleanUniversity, course: cleanCourse });
 	}
 
 	return (
@@ -277,21 +285,26 @@ export default function AuthCallbackPage() {
 				{state === 'choose-role' && (
 					<>
 						<h2 style={{ marginBottom: 8 }}>Welcome to CampusLink</h2>
-						<p className="auth-subtitle" style={{ margin: '0 0 4px' }}>
-							One quick thing — how will you be using CampusLink?
-						</p>
-						<p className="auth-subtitle" style={{ margin: '0 0 20px', fontSize: 12.5 }}>
-							You can fill in your university and course from your profile afterward.
+						<p className="auth-subtitle" style={{ margin: '0 0 20px' }}>
+							A couple quick things — how will you be using CampusLink, and where are you studying?
 						</p>
 						<div className="ac-role-grid">
-							<button type="button" className="ac-role-card" onClick={() => chooseRole('Mentee')}>
+							<button
+								type="button"
+								className={`ac-role-card${selectedRole === 'Mentee' ? ' selected' : ''}`}
+								onClick={() => setSelectedRole('Mentee')}
+							>
 								<div className="ac-role-icon">
 									<BookOpen size={20} />
 								</div>
 								<strong>I'm a Mentee</strong>
 								<span>Looking for tutors and help with courses</span>
 							</button>
-							<button type="button" className="ac-role-card" onClick={() => chooseRole('Mentor')}>
+							<button
+								type="button"
+								className={`ac-role-card${selectedRole === 'Mentor' ? ' selected' : ''}`}
+								onClick={() => setSelectedRole('Mentor')}
+							>
 								<div className="ac-role-icon">
 									<Users size={20} />
 								</div>
@@ -299,6 +312,47 @@ export default function AuthCallbackPage() {
 								<span>Here to tutor and help other students</span>
 							</button>
 						</div>
+
+						<div style={{ marginTop: 20, textAlign: 'left', display: 'flex', flexDirection: 'column', gap: 16 }}>
+							<label className="field">
+								<span>University / School</span>
+								<div className="input-shell">
+									<GraduationCap size={16} />
+									<input
+										type="text"
+										value={university}
+										onChange={(event) => setUniversity(event.target.value)}
+										placeholder="e.g. KNUST"
+									/>
+								</div>
+							</label>
+							<label className="field">
+								<span>Course</span>
+								<div className="input-shell">
+									<BookOpen size={16} />
+									<input
+										type="text"
+										value={course}
+										onChange={(event) => setCourse(event.target.value)}
+										placeholder="e.g. Computer Science"
+									/>
+								</div>
+							</label>
+						</div>
+
+						<p className="auth-subtitle" style={{ margin: '14px 0 0', fontSize: 12.5 }}>
+							You can leave these blank and fill them in from your profile later.
+						</p>
+
+						<button
+							className="primary-button"
+							type="button"
+							disabled={!selectedRole}
+							onClick={chooseRole}
+							style={{ width: '100%', marginTop: 16 }}
+						>
+							Continue <ArrowRight size={16} />
+						</button>
 					</>
 				)}
 
