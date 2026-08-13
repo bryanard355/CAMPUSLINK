@@ -206,25 +206,27 @@ function getSessionTiming(day, time) {
 // overlap between the two: an exact match reads as a strong match, one
 // course name containing the other (e.g. a mentee in "Computer Science" and
 // a mentor in "Computer Science - Software Track") still counts as related,
-// and anything else falls back to a low, honest score rather than a
-// fabricated one. Missing course info on either side can't be judged at
-// all, so it lands on a neutral default instead of a high or low guess.
+// and two unrelated fields (e.g. Optometry and Computer Science) fall to a
+// genuinely low score rather than a merely mediocre one. Missing course info
+// on either side can't be judged at all, so it lands on a neutral default
+// instead of a high or low guess.
 function computeCourseMatch(menteeCourse, mentorCourse) {
   const a = String(menteeCourse || '').trim().toLowerCase();
   const b = String(mentorCourse || '').trim().toLowerCase();
   if (!a || !b) return 75;
   if (a === b) return 98;
   if (a.includes(b) || b.includes(a)) return 85;
-  return 60;
+  return 43;
 }
 
-// Scales a course-match percentage (see computeCourseMatch, 60-98) into the
+// Scales a course-match percentage (see computeCourseMatch, 43-98) into the
 // star rating shown once a mentor has actually had a request — a strong
-// course match reads as 5.0, a weak one still lands respectably (3.8) since
-// this is a course-fit score, not a real quality-of-mentoring judgment.
+// course match reads as 5.0, an unrelated one drops all the way to 3.0,
+// since this is a course-fit score, not a real quality-of-mentoring
+// judgment.
 function computeMentorRating(matchPct) {
-  const clamped = Math.max(60, Math.min(98, matchPct));
-  const rating = 3.8 + ((clamped - 60) / (98 - 60)) * (5.0 - 3.8);
+  const clamped = Math.max(43, Math.min(98, matchPct));
+  const rating = 3.0 + ((clamped - 43) / (98 - 43)) * (5.0 - 3.0);
   return Math.round(rating * 10) / 10;
 }
 
@@ -2123,6 +2125,10 @@ export default function CampusLinkApp() {
       const { data, error } = await client
         .from('mentee_requests')
         .select('*')
+        // Scoped to this mentor's own requests — this used to fetch every
+        // mentee's request platform-wide (bio, testimonial, personal focus
+        // text and all), regardless of who it was addressed to.
+        .eq('tutor_id', String(user.id))
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -2147,10 +2153,13 @@ export default function CampusLinkApp() {
     // whole table — a blanket re-fetch triggered by our own write can race
     // the write itself (PostgREST may briefly still see the pre-update row),
     // which would silently revert an optimistic local change like a cancel.
+    const isRelevantRequest = (row) => String(row.tutor_id) === String(user.id);
+
     const channel = client
-      .channel('mentee-requests-realtime')
+      .channel(`mentee-requests-realtime-${user.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'mentee_requests' }, (payload) => {
         const row = payload.new;
+        if (!isRelevantRequest(row)) return;
         setRequests((prev) => {
           if (prev.some((r) => String(r.id) === String(row.id))) return prev;
           return [mapRequestRow(row), ...prev];
@@ -2158,6 +2167,7 @@ export default function CampusLinkApp() {
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'mentee_requests' }, (payload) => {
         const row = payload.new;
+        if (!isRelevantRequest(row)) return;
         setRequests((prev) => prev.map((r) => (String(r.id) === String(row.id) ? mapRequestRow(row) : r)));
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'mentee_requests' }, (payload) => {
@@ -2170,6 +2180,31 @@ export default function CampusLinkApp() {
       client.removeChannel(channel);
     };
   }, [user?.id, user?.role]);
+
+  // Privacy-safe signal for "has this mentor ever received a request from
+  // anyone" — used only to decide whether Find Tutors shows a real rating or
+  // "New mentor". Deliberately fetches just tutor_id (no bio/personal text),
+  // unlike the mentor-scoped fetch above which needs full detail but only
+  // for that mentor's own requests. Runs for every logged-in user (mainly
+  // useful for mentees, who are the only ones who browse Find Tutors).
+  const [mentorsWithHistory, setMentorsWithHistory] = useState(() => new Set());
+  useEffect(() => {
+    if (!hasSupabaseConfig || !user?.id) return;
+    const client = getSupabase();
+    if (!client) return;
+
+    client
+      .from('mentee_requests')
+      .select('tutor_id')
+      .not('tutor_id', 'is', null)
+      .then(({ data, error }) => {
+        if (error) {
+          console.warn('Could not load mentor request history:', error.message);
+          return;
+        }
+        setMentorsWithHistory(new Set((data || []).map((row) => String(row.tutor_id))));
+      });
+  }, [user?.id]);
 
   // Bookings are real database rows too: mentees see their own bookings,
   // mentors see the sessions booked with them.
