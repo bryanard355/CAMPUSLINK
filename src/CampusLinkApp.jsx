@@ -2568,13 +2568,16 @@ export default function CampusLinkApp() {
   }, []);
 
   // A mentor's rating/testimonial/bio only populate once someone has
-  // actually requested them — recomputed live as `requests` comes in (e.g.
-  // via the realtime subscription below), so a mentor's card updates itself
-  // the moment their first request arrives instead of needing a reload.
+  // actually requested them. Reads `mentorsWithHistory` (a lightweight,
+  // privacy-safe set of tutor_ids that have ever received a request) rather
+  // than `requests` — `requests` only ever holds a mentor's own requests or
+  // a mentee's local cache, never a mentee's view of *other* people's
+  // requests, so it could never tell a mentee anything true about a
+  // mentor's actual track record.
   const mentors = useMemo(() => {
     if (mentorsBase === null) return null;
     return mentorsBase.map((mentor) => {
-      const hasReceivedRequest = requests.some((r) => String(r.tutorId) === String(mentor.id));
+      const hasReceivedRequest = mentorsWithHistory.has(String(mentor.id));
       const matchPct = computeCourseMatch(user?.course, mentor.courses[0]);
       return {
         ...mentor,
@@ -2592,7 +2595,7 @@ export default function CampusLinkApp() {
           : null,
       };
     });
-  }, [mentorsBase, requests, user]);
+  }, [mentorsBase, mentorsWithHistory, user]);
 
   const mentorChatMenteeNames = useMemo(() => {
     if (user?.role !== 'Mentor') return [];
