@@ -95,6 +95,10 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [status, setStatus] = useState({ type: 'idle', message: '' });
   const [loading, setLoading] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetStatus, setResetStatus] = useState({ type: 'idle', message: '' });
+  const [resetLoading, setResetLoading] = useState(false);
 
   function isMissingProfilesTableError(error) {
     const message = String(error?.message || '').toLowerCase();
@@ -308,6 +312,39 @@ export default function LoginPage() {
     // takes it from there once Google redirects back.
   }
 
+  async function handleForgotPassword(event) {
+    event.preventDefault();
+    setResetStatus({ type: 'idle', message: '' });
+
+    if (!hasSupabaseConfig) {
+      setResetStatus({ type: 'error', message: 'Password reset requires Supabase to be configured.' });
+      return;
+    }
+    const client = getSupabase();
+    if (!client) {
+      setResetStatus({ type: 'error', message: 'Unable to initialize Supabase.' });
+      return;
+    }
+
+    const trimmedEmail = resetEmail.trim();
+    setResetLoading(true);
+    const { error } = await client.auth.resetPasswordForEmail(trimmedEmail, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setResetLoading(false);
+
+    if (error) {
+      setResetStatus({ type: 'error', message: error.message });
+      return;
+    }
+    // Deliberately worded not to confirm/deny whether an account exists for
+    // that email.
+    setResetStatus({
+      type: 'success',
+      message: `If an account exists for ${trimmedEmail}, a password reset link has been sent.`,
+    });
+  }
+
   function handleDemoLogin() {
     setEmail(DEMO_ACCOUNT.email);
     setPassword(DEMO_ACCOUNT.password);
@@ -404,124 +441,176 @@ export default function LoginPage() {
               <span className="mini-note">Student portal</span>
             </div>
 
-            <h2 id="login-title">Sign in to your account</h2>
-            <p className="auth-subtitle">
-              Use your university email to continue. Your schedule, bookings, and saved tutors will be ready after login.
-            </p>
-
-            {status.type !== 'idle' && (
-              <div className={`status-banner ${status.type}`} role="status" aria-live="polite">
-                {status.message}
-              </div>
-            )}
-
-            <form className="login-form" onSubmit={handleSubmit}>
-              <label className="field">
-                <span>Email address</span>
-                <div className="input-shell">
-                  <Mail size={16} />
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(event) => setEmail(event.target.value)}
-                    placeholder="name@university.edu"
-                    autoComplete="email"
-                    required
-                  />
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Password</span>
-                <div className="input-shell">
-                  <LockKeyhole size={16} />
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                    placeholder="Enter your password"
-                    autoComplete="current-password"
-                    required
-                  />
-                  <button
-                    type="button"
-                    className="icon-button"
-                    onClick={() => setShowPassword((current) => !current)}
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                </div>
-              </label>
-
-              <label className="field">
-                <span>Login as</span>
-                <div className="input-shell">
-                  <CircleUserRound size={16} />
-                  <select
-                    value={loginRole}
-                    onChange={(event) => setLoginRole(event.target.value)}
-                    style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: 'inherit' }}
-                  >
-                    <option value="Mentee">Mentee</option>
-                    <option value="Mentor">Mentor</option>
-                  </select>
-                </div>
-              </label>
-
-              <div className="form-row">
-                <label className="remember">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(event) => setRememberMe(event.target.checked)}
-                  />
-                  <span>Remember me</span>
-                </label>
-                <button type="button" className="link-button">
-                  Forgot password?
-                </button>
-              </div>
-
-              <button className="primary-button" type="submit">
-                {loading ? 'Signing in...' : 'Continue'} <ArrowRight size={16} />
-              </button>
-
-              <div className="divider">
-                <span>or continue with</span>
-              </div>
-
-              <div className="social-grid">
-                {socialOptions.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    className="social-button"
-                    onClick={option === 'Google' ? handleGoogleLogin : undefined}
-                    disabled={option !== 'Google'}
-                    title={option === 'Google' ? undefined : 'Coming soon'}
-                  >
-                    {option === 'Google' && <GoogleIcon />}
-                    {option}
-                  </button>
-                ))}
-              </div>
-            </form>
-
-            {!hasSupabaseConfig && (
-              <div className="demo-login-block" style={{ marginTop: '1rem' }}>
-                <p className="demo-note" style={{ marginBottom: '0.75rem' }}>
-                  Demo login credentials: <strong>{DEMO_ACCOUNT.email}</strong> / <strong>{DEMO_ACCOUNT.password}</strong>
+            {showForgotPassword ? (
+              <>
+                <h2 id="login-title">Reset your password</h2>
+                <p className="auth-subtitle">
+                  Enter your account email and we'll send you a link to set a new password.
                 </p>
-                <button type="button" className="primary-button" onClick={handleDemoLogin}>
-                  Use demo account
-                </button>
-              </div>
-            )}
 
-            <p className="auth-footer">
-              New here? <button type="button" className="link-button" onClick={() => navigate('/signup')}>Create an account</button>
-            </p>
+                {resetStatus.type !== 'idle' && (
+                  <div className={`status-banner ${resetStatus.type}`} role="status" aria-live="polite">
+                    {resetStatus.message}
+                  </div>
+                )}
+
+                <form className="login-form" onSubmit={handleForgotPassword}>
+                  <label className="field">
+                    <span>Email address</span>
+                    <div className="input-shell">
+                      <Mail size={16} />
+                      <input
+                        type="email"
+                        value={resetEmail}
+                        onChange={(event) => setResetEmail(event.target.value)}
+                        placeholder="name@university.edu"
+                        autoComplete="email"
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <button className="primary-button" type="submit" disabled={resetLoading}>
+                    {resetLoading ? 'Sending...' : 'Send reset link'} <ArrowRight size={16} />
+                  </button>
+                </form>
+
+                <p className="auth-footer">
+                  <button type="button" className="link-button" onClick={() => setShowForgotPassword(false)}>
+                    Back to sign in
+                  </button>
+                </p>
+              </>
+            ) : (
+              <>
+                <h2 id="login-title">Sign in to your account</h2>
+                <p className="auth-subtitle">
+                  Use your university email to continue. Your schedule, bookings, and saved tutors will be ready after login.
+                </p>
+
+                {status.type !== 'idle' && (
+                  <div className={`status-banner ${status.type}`} role="status" aria-live="polite">
+                    {status.message}
+                  </div>
+                )}
+
+                <form className="login-form" onSubmit={handleSubmit}>
+                  <label className="field">
+                    <span>Email address</span>
+                    <div className="input-shell">
+                      <Mail size={16} />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
+                        placeholder="name@university.edu"
+                        autoComplete="email"
+                        required
+                      />
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Password</span>
+                    <div className="input-shell">
+                      <LockKeyhole size={16} />
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        placeholder="Enter your password"
+                        autoComplete="current-password"
+                        required
+                      />
+                      <button
+                        type="button"
+                        className="icon-button"
+                        onClick={() => setShowPassword((current) => !current)}
+                        aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </label>
+
+                  <label className="field">
+                    <span>Login as</span>
+                    <div className="input-shell">
+                      <CircleUserRound size={16} />
+                      <select
+                        value={loginRole}
+                        onChange={(event) => setLoginRole(event.target.value)}
+                        style={{ flex: 1, border: 'none', outline: 'none', background: 'transparent', fontSize: 14, color: 'inherit' }}
+                      >
+                        <option value="Mentee">Mentee</option>
+                        <option value="Mentor">Mentor</option>
+                      </select>
+                    </div>
+                  </label>
+
+                  <div className="form-row">
+                    <label className="remember">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(event) => setRememberMe(event.target.checked)}
+                      />
+                      <span>Remember me</span>
+                    </label>
+                    <button
+                      type="button"
+                      className="link-button"
+                      onClick={() => {
+                        setResetEmail(email);
+                        setResetStatus({ type: 'idle', message: '' });
+                        setShowForgotPassword(true);
+                      }}
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+
+                  <button className="primary-button" type="submit">
+                    {loading ? 'Signing in...' : 'Continue'} <ArrowRight size={16} />
+                  </button>
+
+                  <div className="divider">
+                    <span>or continue with</span>
+                  </div>
+
+                  <div className="social-grid">
+                    {socialOptions.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        className="social-button"
+                        onClick={option === 'Google' ? handleGoogleLogin : undefined}
+                        disabled={option !== 'Google'}
+                        title={option === 'Google' ? undefined : 'Coming soon'}
+                      >
+                        {option === 'Google' && <GoogleIcon />}
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                </form>
+
+                {!hasSupabaseConfig && (
+                  <div className="demo-login-block" style={{ marginTop: '1rem' }}>
+                    <p className="demo-note" style={{ marginBottom: '0.75rem' }}>
+                      Demo login credentials: <strong>{DEMO_ACCOUNT.email}</strong> / <strong>{DEMO_ACCOUNT.password}</strong>
+                    </p>
+                    <button type="button" className="primary-button" onClick={handleDemoLogin}>
+                      Use demo account
+                    </button>
+                  </div>
+                )}
+
+                <p className="auth-footer">
+                  New here? <button type="button" className="link-button" onClick={() => navigate('/signup')}>Create an account</button>
+                </p>
+              </>
+            )}
           </div>
         </section>
       </div>

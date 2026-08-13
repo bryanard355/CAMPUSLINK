@@ -11,6 +11,7 @@ import LoginPage from './LoginPage.jsx';
 import SignUpPage from './SignUpPage.jsx';
 import EmailConfirmedPage from './EmailConfirmedPage.jsx';
 import AuthCallbackPage from './AuthCallbackPage.jsx';
+import ResetPasswordPage from './ResetPasswordPage.jsx';
 import CampusLinkApp from './CampusLinkApp.jsx';
 
 const loginStyles = `
@@ -586,6 +587,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/confirm-email" element={<EmailConfirmedPage />} />
         <Route path="/auth/callback" element={<AuthCallbackPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>
