@@ -252,6 +252,17 @@ function getBookingStartDate(booking) {
   return null;
 }
 
+// Once a booking is inside its final 5 minutes — or already started — the
+// mentee can no longer reschedule or cancel it; it's too close to the
+// mentor's side of things to still be a casual change. A booking with no
+// resolvable start time (e.g. a still-open request with no day/time set
+// yet) has nothing to lock against, so it stays editable.
+function isLockedForChanges(booking) {
+  const start = getBookingStartDate(booking);
+  if (!start) return false;
+  return start.getTime() - Date.now() <= 5 * 60 * 1000;
+}
+
 // 'checked' | 'checkable' | 'not-yet' | 'overdue' | 'unscheduled'. The Check
 // in button opens right at the session's start time and stays open for one
 // hour; past that with no check-in, it's overdue — the caller is
@@ -1354,9 +1365,19 @@ function SessionCard({ booking: b, isMentor, mentors, onReschedule, onCancel, on
   // Only the mentee checks in, and only once the mentor has actually
   // accepted — a still-pending request has nothing confirmed to show up to.
   const checkInState = !isMentor && status === 'accepted' ? getCheckInState(b) : 'unscheduled';
+  // Same 5-minutes-out cutoff regardless of whether the mentor has accepted
+  // yet — once the clock's that close, changing plans stops being a
+  // low-friction tap for either side.
+  const locked = !isMentor && isLockedForChanges(b);
 
   const hasChosenNewSlot = Boolean(pendingDate && pendingTime.trim());
   const pendingDayLabel = pendingDate ? formatBookingDate(pendingDate) : '';
+
+  // If the lock window closes while the reschedule form happens to be open,
+  // don't leave it dangling — collapse it back down.
+  useEffect(() => {
+    if (locked && rescheduling) setRescheduling(false);
+  }, [locked]);
 
   return (
     <div style={{ borderRadius: 20, border: `1px solid ${C.line}`, boxShadow: '0 16px 40px -26px rgba(15,81,50,0.22)', overflow: 'hidden' }}>
@@ -1452,27 +1473,43 @@ function SessionCard({ booking: b, isMentor, mentors, onReschedule, onCancel, on
         )}
 
         {!isMentor && !isCancelled && (
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              type="button"
-              onClick={() => setRescheduling((prev) => !prev)}
-              className="cl-secondary-btn"
-              style={{ flex: 1, padding: '9px 0', borderRadius: 999, fontSize: 12.5, fontWeight: 600, border: `1px solid ${C.line}`, backgroundColor: 'transparent', color: C.greenDark }}
+          locked ? (
+            <div
+              style={{
+                padding: '9px 12px',
+                borderRadius: 999,
+                textAlign: 'center',
+                fontSize: 12,
+                fontWeight: 600,
+                color: C.muted,
+                backgroundColor: '#F7F7F3',
+              }}
             >
-              {rescheduling ? 'Close' : 'Reschedule'}
-            </button>
-            <button
-              type="button"
-              onClick={() => onCancel(b)}
-              className="cl-secondary-btn"
-              style={{ flex: 1, padding: '9px 0', borderRadius: 999, fontSize: 12.5, fontWeight: 700, border: `1px solid ${C.line}`, backgroundColor: 'transparent', color: '#B3261E' }}
-            >
-              Cancel booking
-            </button>
-          </div>
+              Too close to start time to reschedule or cancel
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setRescheduling((prev) => !prev)}
+                className="cl-secondary-btn"
+                style={{ flex: 1, padding: '9px 0', borderRadius: 999, fontSize: 12.5, fontWeight: 600, border: `1px solid ${C.line}`, backgroundColor: 'transparent', color: C.greenDark }}
+              >
+                {rescheduling ? 'Close' : 'Reschedule'}
+              </button>
+              <button
+                type="button"
+                onClick={() => onCancel(b)}
+                className="cl-secondary-btn"
+                style={{ flex: 1, padding: '9px 0', borderRadius: 999, fontSize: 12.5, fontWeight: 700, border: `1px solid ${C.line}`, backgroundColor: 'transparent', color: '#B3261E' }}
+              >
+                Cancel booking
+              </button>
+            </div>
+          )
         )}
 
-        {rescheduling && (
+        {rescheduling && !locked && (
           <div style={{ padding: 12, borderRadius: 14, backgroundColor: '#F7F7F3', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <div style={{ display: 'flex', gap: 8 }}>
               <label style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
