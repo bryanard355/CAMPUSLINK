@@ -882,7 +882,6 @@ export default function Dashboard() {
         <div className="wrap">
           <div className="app-head">
             <h2>{loggedInUser ? `Welcome back, ${loggedInUser.name || loggedInUser.email}` : 'Your CampusLink dashboard'}</h2>
-            <span className="mono" style={{ fontSize: '12px', color: 'var(--ink-soft)' }}>live from the database</span>
           </div>
 
           <div className="tabbar">
