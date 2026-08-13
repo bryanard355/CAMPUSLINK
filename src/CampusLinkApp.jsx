@@ -291,6 +291,48 @@ function SessionTimingBadge({ day, time }) {
   );
 }
 
+// Compact "Done" / "Overdue" indicator for a confirmed session's check-in
+// outcome — same colors as SessionStatusPill's missed/declined state and the
+// full-size check-in banner on the session ticket, just small enough to sit
+// next to a booking's code pill in a summary list (e.g. the home page).
+function CheckInStatusPill({ state }) {
+  if (state === 'checked') {
+    return (
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          padding: '4px 10px',
+          borderRadius: 999,
+          backgroundColor: C.greenSoft,
+          color: C.greenDark,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        ✓ Done
+      </span>
+    );
+  }
+  if (state === 'overdue') {
+    return (
+      <span
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          padding: '4px 10px',
+          borderRadius: 999,
+          backgroundColor: '#FBE9E7',
+          color: '#B3261E',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        Overdue
+      </span>
+    );
+  }
+  return null;
+}
+
 /* ---------------------------------------------------------------
    Shared bits
 --------------------------------------------------------------- */
@@ -759,18 +801,35 @@ function HomePage({ upcoming, mentors, onOpenTutor, navigateView, user }) {
           </Card>
         ) : (
           <div className="cl-2col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-            {upcoming.slice(0, 4).map((b) => (
-              <Card key={b.id} style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderRadius: 18 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                  <Avatar initials={b.initials} size={38} />
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>{b.tutorName}</div>
-                    <div style={{ fontSize: 12, color: C.muted }}>{b.course} · {b.day}, {b.time}</div>
+            {upcoming.slice(0, 4).map((b) => {
+              // Mirrors the same status logic as the full session ticket
+              // (SessionCard): a confirmed session that's been checked into
+              // shows "Done", one whose 1-hour check-in window just lapsed
+              // shows "Overdue", and one the background sweep already
+              // flipped to missed (see markOverdueBookingsMissed below)
+              // shows "Missed" via the normal status pill.
+              const status = b.status || 'pending';
+              const checkInState = status === 'accepted' ? getCheckInState(b) : 'unscheduled';
+              return (
+                <Card key={b.id} style={{ padding: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderRadius: 18 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+                    <Avatar initials={b.initials} size={38} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 600, color: C.ink }}>{b.tutorName}</div>
+                      <div style={{ fontSize: 12, color: C.muted }}>{b.course} · {b.day}, {b.time}</div>
+                    </div>
                   </div>
-                </div>
-                <Pill>{b.code}</Pill>
-              </Card>
-            ))}
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, flexShrink: 0 }}>
+                    {checkInState === 'checked' || checkInState === 'overdue' ? (
+                      <CheckInStatusPill state={checkInState} />
+                    ) : (
+                      <SessionStatusPill status={status} />
+                    )}
+                    <Pill>{b.code}</Pill>
+                  </div>
+                </Card>
+              );
+            })}
           </div>
         )}
       </div>
