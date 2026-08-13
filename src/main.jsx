@@ -483,6 +483,10 @@ const loginStyles = `
   }
 
   .social-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
     border: 1px solid var(--login-border);
     background: white;
     color: var(--login-accent-strong);
@@ -490,6 +494,9 @@ const loginStyles = `
     padding: 11px 8px;
     font-weight: 600;
     cursor: pointer;
+  }
+  .social-button svg {
+    flex-shrink: 0;
   }
   .social-button:disabled {
     opacity: 0.45;
