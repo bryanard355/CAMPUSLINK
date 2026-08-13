@@ -218,6 +218,16 @@ function computeCourseMatch(menteeCourse, mentorCourse) {
   return 60;
 }
 
+// Scales a course-match percentage (see computeCourseMatch, 60-98) into the
+// star rating shown once a mentor has actually had a request — a strong
+// course match reads as 5.0, a weak one still lands respectably (3.8) since
+// this is a course-fit score, not a real quality-of-mentoring judgment.
+function computeMentorRating(matchPct) {
+  const clamped = Math.max(60, Math.min(98, matchPct));
+  const rating = 3.8 + ((clamped - 60) / (98 - 60)) * (5.0 - 3.8);
+  return Math.round(rating * 10) / 10;
+}
+
 // Reconstructs the exact moment a booking starts, using the raw ISO date
 // stored alongside its display label (booking.day is just a formatted
 // string like "Tue, Jan 14" with no year, so it can't be compared against
@@ -974,6 +984,10 @@ function todayIsoDate() {
 }
 
 function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpenChat }) {
+  // A mentor with no course set on their profile has an empty `courses`
+  // array — falling back here avoids literal "undefined" showing up in
+  // mentee-facing request/booking text (and in the course column itself).
+  const primaryCourse = tutor.courses && tutor.courses[0] ? tutor.courses[0] : 'general mentoring';
   // { date: 'YYYY-MM-DD', time: free text } — any day is bookable, and the
   // mentee types their own preferred time rather than picking from a fixed
   // list, since real per-mentor availability isn't tracked yet.
@@ -1027,8 +1041,8 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
                         .slice(0, 2)
                         .toUpperCase(),
                       major: user?.course || 'Your course',
-                      course: tutor.courses[0],
-                      focus: `Looking for support with ${tutor.courses[0]} and a session ${slotLabel.toLowerCase()}.`,
+                      course: primaryCourse,
+                      focus: `Looking for support with ${primaryCourse} and a session ${slotLabel.toLowerCase()}.`,
                       urgency: 'New request',
                       match: 92,
                       availability: [slotLabel],
@@ -1036,7 +1050,7 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
                       verified: false,
                       sessions: 0,
                       price: 0,
-                      bio: `${user?.name || 'A student'} is requesting help from ${tutor.name} for ${tutor.courses[0]}.`,
+                      bio: `${user?.name || 'A student'} is requesting help from ${tutor.name} for ${primaryCourse}.`,
                       testimonial: { name: user?.name || 'Student', text: 'Looking for support from a mentor.' },
                       mentorName: tutor.name,
                       tutorId: tutor.id,
@@ -1051,7 +1065,7 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
                         initials: tutor.initials,
                         tutorName: tutor.name,
                         tutorId: tutor.id,
-                        course: tutor.courses[0],
+                        course: primaryCourse,
                         day: formatBookingDate(selectedDate),
                         time: selectedTime.trim(),
                         code: sessionCode,
@@ -1167,7 +1181,7 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
                   initials: tutor.initials,
                   tutorName: tutor.name,
                   tutorId: tutor.id,
-                  course: tutor.courses[0],
+                  course: primaryCourse,
                   day: bookingDay,
                   dateIso: selectedDate,
                   time: bookingTime,
@@ -1192,8 +1206,8 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
                     .slice(0, 2)
                     .toUpperCase(),
                   major: user?.course || 'Your course',
-                  course: tutor.courses[0],
-                  focus: `Booked a session on ${bookingDay} at ${bookingTime} for ${tutor.courses[0]}.`,
+                  course: primaryCourse,
+                  focus: `Booked a session on ${bookingDay} at ${bookingTime} for ${primaryCourse}.`,
                   urgency: `${bookingDay} at ${bookingTime}`,
                   match: 92,
                   availability: [`${bookingDay} ${bookingTime}`],
@@ -1201,7 +1215,7 @@ function TutorProfilePage({ tutor, user, onBack, onBooked, onRequestSent, onOpen
                   verified: false,
                   sessions: 0,
                   price: 0,
-                  bio: `${user?.name || 'A student'} booked a session with ${tutor.name} on ${bookingDay} at ${bookingTime} for ${tutor.courses[0]}.`,
+                  bio: `${user?.name || 'A student'} booked a session with ${tutor.name} on ${bookingDay} at ${bookingTime} for ${primaryCourse}.`,
                   testimonial: { name: user?.name || 'Student', text: 'Looking forward to my session.' },
                   mentorName: tutor.name,
                   tutorId: tutor.id,
@@ -1427,7 +1441,7 @@ function SessionCard({ booking: b, isMentor, mentors, onReschedule, onCancel, on
               type="button"
               disabled={!hasChosenNewSlot}
               onClick={() => {
-                onReschedule(b, pendingDayLabel, pendingTime.trim());
+                onReschedule(b, pendingDayLabel, pendingTime.trim(), pendingDate);
                 setRescheduling(false);
               }}
               className={hasChosenNewSlot ? 'cl-primary-btn' : ''}
@@ -2526,10 +2540,11 @@ export default function CampusLinkApp() {
     if (mentorsBase === null) return null;
     return mentorsBase.map((mentor) => {
       const hasReceivedRequest = requests.some((r) => String(r.tutorId) === String(mentor.id));
+      const matchPct = computeCourseMatch(user?.course, mentor.courses[0]);
       return {
         ...mentor,
-        match: computeCourseMatch(user?.course, mentor.courses[0]),
-        rating: hasReceivedRequest ? 4.8 : null,
+        match: matchPct,
+        rating: hasReceivedRequest ? computeMentorRating(matchPct) : null,
         bio: hasReceivedRequest
           ? (mentor.courses[0]
               ? `Experienced mentor available for ${mentor.courses[0]} support.`
@@ -2805,10 +2820,14 @@ export default function CampusLinkApp() {
   // Mentee reschedules an existing booking to a different day/time. Takes
   // effect immediately — no mentor re-approval needed. The mentor's Sessions
   // view picks up the new time automatically since it reads the linked
-  // booking's day/time live.
-  const handleRescheduleBooking = (booking, day, time) => {
+  // booking's day/time live. `dateIso` must be updated alongside the display
+  // label — getBookingStartDate/getCheckInState trust dateIso over `day` for
+  // computing whether a session is live/overdue, so leaving it stale would
+  // make a freshly-rescheduled future session immediately read as overdue
+  // (and eventually get auto-marked "missed") based on its old date.
+  const handleRescheduleBooking = (booking, day, time, dateIso) => {
     setBookings((prev) => {
-      const next = prev.map((b) => (String(b.id) === String(booking.id) ? { ...b, day, time } : b));
+      const next = prev.map((b) => (String(b.id) === String(booking.id) ? { ...b, day, time, dateIso, checkedInAt: null } : b));
       if (typeof window !== 'undefined') {
         localStorage.setItem('campuslink-bookings', JSON.stringify(next));
         window.dispatchEvent(new CustomEvent('campuslink-bookings-updated', { detail: next }));
@@ -2822,7 +2841,7 @@ export default function CampusLinkApp() {
 
     client
       .from('bookings')
-      .update({ day, time })
+      .update({ day, time, date: dateIso || null, checked_in_at: null })
       .eq('id', String(booking.id))
       .then(({ error }) => {
         if (error) console.warn('Could not persist rescheduled time to Supabase:', error.message);
@@ -2960,7 +2979,9 @@ export default function CampusLinkApp() {
       setActiveRequest(request);
       setActiveTutor(null);
     } else {
-      const tutor = mentors.find((m) => String(m.id) === String(session.tutorId));
+      // mentors can still be null here — bookings load in their own effect
+      // and can resolve before the mentors list does.
+      const tutor = (mentors || []).find((m) => String(m.id) === String(session.tutorId));
       if (!tutor) return;
       setActiveTutor(tutor);
       setActiveRequest(null);
