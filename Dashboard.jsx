@@ -848,7 +848,7 @@ export default function Dashboard() {
       <section className="hero">
         <div className="wrap hero-grid">
           <div>
-            <span className="eyebrow">CSM 366 Capstone · Campus Learning Exchange</span>
+            <span className="eyebrow">Campus Learning Exchange</span>
             <h1>Trade what you know<br />for what you need to learn.</h1>
             <p className="lead">
               CampusLink replaces scattered WhatsApp groups and screenshots with one verified place to swap skills,
