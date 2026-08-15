@@ -604,3 +604,23 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     </BrowserRouter>
   </React.StrictMode>
 );
+
+// Dismisses the brand splash screen (see index.html) once the real app has
+// actually painted. Held on screen for a minimum stretch so it reads as an
+// intentional splash rather than a flicker on fast connections, but never
+// any longer than necessary on slow ones.
+function hideSplash() {
+  const splash = document.getElementById('app-splash');
+  if (!splash) return;
+  const elapsed = Date.now() - (window.__splashStart || Date.now());
+  const remaining = Math.max(0, 500 - elapsed);
+  setTimeout(() => {
+    splash.classList.add('app-splash-hide');
+    setTimeout(() => splash.remove(), 450);
+  }, remaining);
+}
+
+// Two animation frames guarantee the browser has actually painted the
+// freshly mounted React tree before the splash starts fading — one frame
+// isn't always enough to be sure the paint (not just the commit) happened.
+requestAnimationFrame(() => requestAnimationFrame(hideSplash));
