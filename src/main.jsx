@@ -613,7 +613,7 @@ function hideSplash() {
   const splash = document.getElementById('app-splash');
   if (!splash) return;
   const elapsed = Date.now() - (window.__splashStart || Date.now());
-  const remaining = Math.max(0, 500 - elapsed);
+  const remaining = Math.max(0, 2000 - elapsed);
   setTimeout(() => {
     splash.classList.add('app-splash-hide');
     setTimeout(() => splash.remove(), 450);
