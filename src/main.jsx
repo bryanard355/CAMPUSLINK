@@ -14,6 +14,18 @@ import AuthCallbackPage from './AuthCallbackPage.jsx';
 import ResetPasswordPage from './ResetPasswordPage.jsx';
 import CampusLinkApp from './CampusLinkApp.jsx';
 
+// Registers the app's service worker so Chrome/Edge recognize CampusLink as
+// installable (desktop "Install app" prompt, standalone window when
+// launched). Skipped in local dev — a dev-registered SW tends to keep
+// serving a stale build after `npm run dev` restarts.
+if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((error) => {
+      console.warn('Service worker registration failed:', error);
+    });
+  });
+}
+
 const loginStyles = `
   :root {
     --login-bg: #f7faf8;
