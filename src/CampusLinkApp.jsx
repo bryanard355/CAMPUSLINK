@@ -7,6 +7,7 @@ import {
   touchRememberedSession,
   forgetRememberedSession,
 } from './lib/supabaseClient';
+import { isPushSupported, hasActivePushSubscription, subscribeToPush, unsubscribeFromPush } from './lib/push';
 import {
   GraduationCap,
   Bell,
@@ -1605,6 +1606,73 @@ function SessionsPage({ bookings, role, mentors, onReschedule, onCancel, onCheck
 /* ---------------------------------------------------------------
    Profile
 --------------------------------------------------------------- */
+// Lets someone turn real push notifications (arrive even with CampusLink
+// fully closed — see public/sw.js and src/lib/push.js) on or off for this
+// specific browser/device. Deliberately its own self-contained card rather
+// than baked into the profile form: this is a per-device browser
+// permission, not an account field that saves anywhere else.
+function PushNotificationsCard({ userId }) {
+  const [supported, setSupported] = useState(true);
+  const [subscribed, setSubscribed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    setSupported(isPushSupported());
+    hasActivePushSubscription().then(setSubscribed);
+  }, []);
+
+  async function handleToggle() {
+    setBusy(true);
+    setMessage('');
+    const result = subscribed ? await unsubscribeFromPush() : await subscribeToPush(userId);
+    setBusy(false);
+    if (!result.ok) {
+      setMessage(result.error || 'Something went wrong.');
+      return;
+    }
+    setSubscribed(!subscribed);
+  }
+
+  return (
+    <Card style={{ padding: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <div>
+          <div style={{ fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 13.5, color: C.ink }}>Push notifications</div>
+          <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
+            {supported
+              ? 'Get notified on this device for new messages and request updates, even when CampusLink is closed.'
+              : "This browser doesn't support push notifications."}
+          </div>
+        </div>
+        {supported && (
+          <button
+            type="button"
+            onClick={handleToggle}
+            disabled={busy}
+            className={subscribed ? 'cl-secondary-btn' : 'cl-primary-btn'}
+            style={{
+              flexShrink: 0,
+              padding: '9px 16px',
+              borderRadius: 999,
+              fontSize: 12.5,
+              fontWeight: 700,
+              border: subscribed ? `1px solid ${C.line}` : 'none',
+              backgroundColor: subscribed ? 'transparent' : C.greenDark,
+              color: subscribed ? C.greenDark : '#fff',
+              cursor: busy ? 'wait' : 'pointer',
+              opacity: busy ? 0.7 : 1,
+            }}
+          >
+            {busy ? 'Working…' : subscribed ? 'Turn off' : 'Enable'}
+          </button>
+        )}
+      </div>
+      {message && <div style={{ fontSize: 12, color: '#B3261E', marginTop: 10 }}>{message}</div>}
+    </Card>
+  );
+}
+
 function ProfilePage({ onLogout, user, editing, editProfile, onEdit, onCancel, onSave, onChange, status }) {
   const initials = user?.name ? user.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase() : 'CL';
 
@@ -1747,6 +1815,7 @@ function ProfilePage({ onLogout, user, editing, editProfile, onEdit, onCancel, o
               </Card>
             </>
           )}
+          <PushNotificationsCard userId={user?.id} />
         </div>
       </div>
     </div>
