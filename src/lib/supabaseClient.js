@@ -39,6 +39,94 @@ export function getTabAuthStorageKey() {
 export function setTabAuthStorageKey(storageKey) {
   if (typeof window === 'undefined') return;
   sessionStorage.setItem(AUTH_TAB_KEY, storageKey);
+  // Every call site that sets this is a genuine successful login, signup,
+  // or Google role-selection — exactly the moments worth remembering across
+  // a full app close, so this device can walk back into the same account
+  // next time without a fresh sessionStorage tab id losing track of it.
+  rememberSession(storageKey);
+}
+
+// --- Device-level "stay logged in" persistence --------------------------
+// The per-tab scheme above is genuinely per-BROWSING-CONTEXT: its pointer
+// lives in sessionStorage, which is wiped whenever that context actually
+// closes (including an installed PWA getting killed in the background,
+// which mobile OSes do often). The underlying token still sits untouched in
+// localStorage, just orphaned — nothing points at it anymore. This section
+// keeps a second, deliberately durable pointer in localStorage recording
+// which key a fresh app load should try, so reopening the app (a new
+// browsing context, with empty sessionStorage) can still find its way back
+// to the same account instead of always landing on the login screen.
+const REMEMBER_KEY = 'campuslink-remembered-session';
+const REMEMBER_MAX_INACTIVITY_MS = 5 * 24 * 60 * 60 * 1000; // 5 days
+
+function readRememberedSession() {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem(REMEMBER_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function rememberSession(storageKey) {
+  if (typeof window === 'undefined' || !storageKey) return;
+  try {
+    localStorage.setItem(REMEMBER_KEY, JSON.stringify({ storageKey, lastActiveAt: Date.now() }));
+  } catch {
+    // Best-effort — a full/blocked localStorage just means this device
+    // won't stay logged in across closes, not something worth crashing over.
+  }
+}
+
+// Bumps the "last used" timestamp without changing which key is
+// remembered — call this periodically while someone is actually using the
+// app so a long-lived open tab (or one reopened well within the window)
+// keeps resetting its own 5-day inactivity clock.
+export function touchRememberedSession() {
+  const remembered = readRememberedSession();
+  if (!remembered?.storageKey) return;
+  rememberSession(remembered.storageKey);
+}
+
+export function forgetRememberedSession() {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(REMEMBER_KEY);
+  } catch {
+    // no-op
+  }
+}
+
+// Called once, early, on a fresh app load before any per-tab key has been
+// chosen yet. If this device has a remembered login and it's been used
+// inside the last 5 days, adopts that same storage key so the normal
+// getSession() restore flow finds its token like nothing happened. Past 5
+// days of nobody opening the app, it's treated as expired: the stale token
+// itself is dropped (not just the pointer to it), so an old, unused device
+// doesn't keep holding a live, indefinitely-valid refresh token, and the
+// visitor is sent back to a real login instead.
+export function tryAdoptRememberedSession() {
+  if (typeof window === 'undefined') return false;
+  const remembered = readRememberedSession();
+  if (!remembered?.storageKey) return false;
+
+  const inactiveFor = Date.now() - (remembered.lastActiveAt || 0);
+  if (inactiveFor > REMEMBER_MAX_INACTIVITY_MS) {
+    try {
+      localStorage.removeItem(remembered.storageKey);
+    } catch {
+      // no-op
+    }
+    forgetRememberedSession();
+    return false;
+  }
+
+  // Adopting the key doubles as a "used the app" touch — it's set via
+  // setTabAuthStorageKey (not a raw sessionStorage write) specifically so
+  // this refreshes the inactivity clock too.
+  setTabAuthStorageKey(remembered.storageKey);
+  return true;
 }
 
 export function getRoleStorageKey(role) {

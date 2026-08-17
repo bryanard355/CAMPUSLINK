@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GraduationCap, Users, Calendar, MessageCircle, ShieldCheck, ChevronDown, Mail, Phone, MapPin, User } from 'lucide-react';
+import { tryAdoptRememberedSession } from './lib/supabaseClient';
 
 const CONTACT = {
   email: 'bryanowusuansah56@gmail.com',
@@ -152,6 +153,19 @@ const styles = `
 export default function LandingPage() {
   const navigate = useNavigate();
   const [openFaq, setOpenFaq] = useState(null);
+
+  // This is the PWA's start_url — the page an installed home-screen/desktop
+  // app actually opens on. If this device still has a login remembered from
+  // within the last 5 days, skip straight past the marketing page into the
+  // app instead of making a returning, already-logged-in visitor look at a
+  // "Log in" button; CampusLinkApp's own session-restore effect does the
+  // real verification and bounces back to /login itself if the token turns
+  // out to be invalid.
+  useEffect(() => {
+    if (tryAdoptRememberedSession()) {
+      navigate('/home', { replace: true });
+    }
+  }, [navigate]);
 
   return (
     <div className="lp-root">

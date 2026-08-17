@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ArrowRight,
   BadgeCheck,
@@ -14,7 +14,14 @@ import {
   Star,
   Zap,
 } from 'lucide-react';
-import { hasSupabaseConfig, getSupabase, getRoleStorageKey, setTabAuthStorageKey } from './lib/supabaseClient';
+import {
+  hasSupabaseConfig,
+  getSupabase,
+  getRoleStorageKey,
+  setTabAuthStorageKey,
+  tryAdoptRememberedSession,
+  forgetRememberedSession,
+} from './lib/supabaseClient';
 import { useNavigate } from 'react-router-dom';
 
 const highlights = [
@@ -99,6 +106,17 @@ export default function LoginPage() {
   const [resetEmail, setResetEmail] = useState('');
   const [resetStatus, setResetStatus] = useState({ type: 'idle', message: '' });
   const [resetLoading, setResetLoading] = useState(false);
+
+  // If this device already has a login remembered from within the last 5
+  // days (see supabaseClient.js), someone landing directly on /login —
+  // rather than via the landing page — shouldn't have to sign in again;
+  // send them straight into the app instead.
+  useEffect(() => {
+    if (tryAdoptRememberedSession()) {
+      navigate('/home', { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function isMissingProfilesTableError(error) {
     const message = String(error?.message || '').toLowerCase();
@@ -287,6 +305,11 @@ export default function LoginPage() {
         course: profile?.course || '',
       })
     );
+    // setTabAuthStorageKey (above) always remembers this login for next time
+    // the app is opened on this device — opting back out here if "Remember
+    // me" was unchecked, so a shared/public computer doesn't silently stay
+    // signed in after the browser closes.
+    if (!rememberMe) forgetRememberedSession();
     navigate('/home');
     console.log('Logged in user role:', actualRole);
   }

@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { hasSupabaseConfig, getSupabase } from './lib/supabaseClient';
+import {
+  hasSupabaseConfig,
+  getSupabase,
+  tryAdoptRememberedSession,
+  touchRememberedSession,
+  forgetRememberedSession,
+} from './lib/supabaseClient';
 import {
   GraduationCap,
   Bell,
@@ -2540,6 +2546,7 @@ export default function CampusLinkApp() {
       try {
         setUser(JSON.parse(raw));
         setCheckingSession(false);
+        touchRememberedSession();
         return;
       } catch (error) {
         setUser(null);
@@ -2548,10 +2555,16 @@ export default function CampusLinkApp() {
       }
     }
 
-    // No usable cached user. Rather than ever rendering the app as if
-    // someone were logged in (the old behavior fell back to a placeholder
-    // "Alex" account), try to restore a real Supabase session — and if
-    // that comes up empty too, send the visitor to /login instead.
+    // No usable cached user — this is what a genuinely fresh browsing
+    // context looks like (a new tab, or the installed app reopened after
+    // being closed), since that cache lives in sessionStorage too. Before
+    // giving up, see whether this device has a remembered login from within
+    // the last 5 days and, if so, point this fresh context at the same
+    // storage key so the getSession() check below finds it. Rather than
+    // ever rendering the app as if someone were logged in (the old behavior
+    // fell back to a placeholder "Alex" account), if that comes up empty
+    // too, send the visitor to /login instead.
+    tryAdoptRememberedSession();
     if (!hasSupabaseConfig) {
       navigate('/login');
       return;
@@ -2584,6 +2597,7 @@ export default function CampusLinkApp() {
       if (!cancelled) {
         setUser(profileUser);
         setCheckingSession(false);
+        touchRememberedSession();
       }
     }
 
@@ -2592,6 +2606,24 @@ export default function CampusLinkApp() {
       cancelled = true;
     };
   }, []);
+
+  // Keeps the device-level "remembered login" (see supabaseClient.js) from
+  // expiring out from under someone who's actually still using the app —
+  // touched on a steady interval for a long-lived open tab, and again
+  // whenever the tab/app comes back into view after being backgrounded,
+  // which is the far more common case for a phone or installed app.
+  useEffect(() => {
+    if (!user?.id) return;
+    const interval = setInterval(touchRememberedSession, 15 * 60 * 1000);
+    function handleVisibility() {
+      if (document.visibilityState === 'visible') touchRememberedSession();
+    }
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     if (!hasSupabaseConfig) {
@@ -3495,6 +3527,10 @@ export default function CampusLinkApp() {
           }
           sessionStorage.removeItem('campuslink-auth');
           sessionStorage.removeItem('campuslink-user');
+          // An explicit logout should mean it — otherwise reopening the app
+          // within the 5-day window would silently sign back in as if
+          // nothing happened.
+          forgetRememberedSession();
           navigate('/login');
         }}
         user={user}
